@@ -4,6 +4,7 @@ using CommonLib.Utils;
 using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
+using System.Dynamic;
 using System.Linq;
 
 namespace CommonLib.DatabaseClient
@@ -16,16 +17,13 @@ namespace CommonLib.DatabaseClient
     public abstract class RedisBaseService : ABSRedisBase, IDisposable
     {
         public string connString = string.Empty;
-        static Stack<ITransaction> transactionList = new Stack<ITransaction>();
-        public static IConnectionMultiplexer conn = null;
-        IDatabase db = null;
-        ISubscriber sub = null;
+        public IConnectionMultiplexer conn = null;
+        public IDatabase db { get { return conn.GetDatabase(); } }
+        public ISubscriber sub { get { return conn.GetSubscriber(); } }
 
         public RedisBaseService(string conStr)
         {
             conn = GetConnection(conStr);
-            db = conn.GetDatabase();
-            sub = conn.GetSubscriber();
         }
 
         public virtual void Dispose()
@@ -79,6 +77,7 @@ namespace CommonLib.DatabaseClient
         public T GetItem<T>(string tableName, string key)
         {
             RedisValue rv = db.HashGet(tableName, key);
+            if (!rv.HasValue) return default(T);
             return DataConvert.StringToObject<T>(rv);
         }
 
@@ -89,6 +88,29 @@ namespace CommonLib.DatabaseClient
             {
                 return DataConvert.StringToObject<T>(d.Value);
             });
+        }
+
+        public List<T> GetItemWild<T>(string tableName, FilterCondition filter)
+        {
+            List<T> list = new List<T>();
+            if (filter.Pattern == null)  { return new List<T>(); }
+
+            if(filter.CompareType == TableCompareType.EQ)
+            {
+                T obj = GetItem<T>(tableName, filter.Pattern.ToString());
+                if(obj != null) { list.Add(obj); }
+
+                return  list;
+            }
+
+            RedisValue rValue = new RedisValue(filter.Pattern.ToString());
+
+            foreach (var h in db.HashScan(tableName, rValue))
+            {
+                list.Add(DataConvert.StringToObject<T>(h.Value));
+            }
+
+            return list;
         }
 
         public List<T> GetAllItem<T>(string tableName)
@@ -275,7 +297,6 @@ namespace CommonLib.DatabaseClient
         public void RollBack()
         {
             redisQueue.Clear();
-            redisQueue = null;
         }
 
         public override bool RemoveItem(string tableName, string key)

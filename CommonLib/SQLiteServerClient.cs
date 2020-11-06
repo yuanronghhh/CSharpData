@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using CommonLib.SQLTablePackage;
 using CommonLib.TableBasePackage;
 using Dapper;
 
@@ -10,7 +11,7 @@ namespace CommonLib.DatabaseClient
     {
     }
 
-    public abstract class SQLiteClientBase : SQLTablePackage.SQLTableBase, ISQLiteBase
+    public abstract class SQLiteClientBase : SQLTableBase, ISQLiteBase
     {
         public SQLiteClientBase(string cStr = null) : base(cStr)
         {

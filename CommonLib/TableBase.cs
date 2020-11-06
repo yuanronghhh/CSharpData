@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Commonlib.Reflection;
 using CommonLib.TableData;
+using DnsClient;
 
 /// <summary>
 /// BaseTable 将实体数据如同表一样获取
@@ -12,24 +14,35 @@ using CommonLib.TableData;
 namespace CommonLib.TableData
 {
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
-    public class TableDecorator : Attribute
+    public class TableName : Attribute
     {
-        public string TableName { get; set; }
+        public string Value { get; set; }
 
-        public TableDecorator(string name)
+        public TableName(string name)
         {
-            TableName = name;
+            Value = name;
         }
     }
 
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = true)]
-    public class TableFields : Attribute
+    public class DatabaseFields : Attribute
     {
         public bool IsTableField { get; set; }
 
-        public TableFields(bool isTableField = true)
+        public DatabaseFields(bool isTableField = true)
         {
             IsTableField = isTableField;
+        }
+    }
+
+    [AttributeUsage(AttributeTargets.Property, AllowMultiple = true)]
+    public class PrimaryKey : Attribute
+    {
+        public bool IsPrimaryKey { get; set; }
+
+        public PrimaryKey(bool isPrimaryKey = true)
+        {
+            IsPrimaryKey = isPrimaryKey;
         }
     }
 }
@@ -112,16 +125,16 @@ namespace CommonLib.TableBasePackage
         public static string GetTableName<T>(T data)
         {
             Type tp = data.GetType();
-            TableDecorator decorator;
+            TableName decorator;
 
-            var attribute = tp.GetCustomAttributes(typeof(TableDecorator), false).FirstOrDefault();
+            var attribute = tp.GetCustomAttributes(typeof(TableName), false).FirstOrDefault();
             if (attribute == null)
             {
                 return "";
             }
-            decorator = attribute as TableDecorator;
+            decorator = attribute as TableName;
 
-            return decorator.TableName;
+            return decorator.Value;
         }
         public static List<PropertyInfo> GetFieldProperties<T>(T data, Func<PropertyInfo, bool> isFieldHandle)
         {
@@ -150,27 +163,67 @@ namespace CommonLib.TableBasePackage
             return p;
         }
 
-        public static bool IsTableField(PropertyInfo p)
+        public static bool IsPrimaryKey(PropertyInfo p)
         {
-            TableFields decorator;
-            object attribute = p.GetCustomAttributes(typeof(TableFields), false).FirstOrDefault();
+            PrimaryKey decorator;
+            object attribute = p.GetCustomAttributes(typeof(PrimaryKey), false).FirstOrDefault();
             if (attribute == null)
             {
                 return false;
             }
 
-            decorator = attribute as TableFields;
+            decorator = attribute as PrimaryKey;
+            return decorator.IsPrimaryKey;
+        }
+
+        public static bool IsTableField(PropertyInfo p)
+        {
+            DatabaseFields decorator;
+            object attribute = p.GetCustomAttributes(typeof(DatabaseFields), false).FirstOrDefault();
+            if (attribute == null)
+            {
+                return false;
+            }
+
+            decorator = attribute as DatabaseFields;
             return decorator.IsTableField;
         }
         public static List<object> GetTableValues<T>(T data)
         {
-            List<PropertyInfo> props = GetTableFieldProperties(data);
-            return props.ConvertAll(d => d.GetValue(data, null));
+            Type tp = typeof(T);
+            if(tp == typeof(Dictionary<string, object>))
+            {
+                return GetTableDictValues(data as Dictionary<string, object>);
+            }
+            else if (tp.IsClass)
+            {
+                List<PropertyInfo> props = GetTableFieldProperties(data);
+                return props.ConvertAll(d => d.GetValue(data, null));
+            }
+            else
+            {
+                return new List<object>();
+            }
         }
-        public static List<string> GetTableFieldName<T>(T data)
+
+        public static List<string> GetTableFieldNames<T>(T data)
         {
-            List<PropertyInfo> props = GetTableFieldProperties(data);
-            return props.ConvertAll(d => d.Name);
+            Type tp = typeof(T);
+
+            if(tp == typeof(Dictionary<string, object>))
+            {
+                List<string> props = GetTableDictNames(data as Dictionary<string, object>);
+                return props;
+            } 
+            else if (tp.IsClass)
+            {
+                List<PropertyInfo> props = GetTableFieldProperties(data);
+                return props.ConvertAll(d => d.Name);
+            }
+            else
+            {
+                return new List<string>();
+            }
         }
         public static bool HasTableProperty<T>(string propName)
         {
@@ -186,6 +239,30 @@ namespace CommonLib.TableBasePackage
         {
             return GetFieldProperties(data, IsTableField);
         }
+
+        #region Dictionary
+        public static List<object> GetTableDictValues(Dictionary<string, object> data)
+        {
+            List<object> props = new List<object>();
+            foreach (var kp in data)
+            {
+                props.Add(kp.Value);
+            }
+
+            return props;
+        }
+
+        public static List<string> GetTableDictNames(Dictionary<string, object> data)
+        {
+            List<string> props = new List<string>();
+            foreach (var kp in data)
+            {
+                props.Add(kp.Key);
+            }
+
+            return props;
+        }
+        #endregion
     }
 }
 

@@ -25,6 +25,15 @@ namespace CommonLib.TableBasePackage
 
         List<T> GetAllItem<T>(string tableName);
         int CountItemList<T>(string tableName, List<FilterCondition> where);
+
+        #region Dictionary Mode
+        List<Dictionary<string, object>> GetAllItemDict(string tableName);
+
+        Dictionary<string, object> GetItemDict(string tableName, string property, string id);
+
+        List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where);
+        List<Dictionary<string, object>> GetItemListDict(string tableName, FilterCondition where);
+        #endregion
     }
 
     public abstract class ABSTableBase

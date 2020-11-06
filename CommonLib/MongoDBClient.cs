@@ -105,7 +105,6 @@ namespace CommonLib.DatabaseClient
 
         public T GetItem<T>(string tableName, string property, string id)
         {
-            id = this.Escape(id);
             IMongoCollection<T> collection = db.GetCollection<T>(tableName);
             FilterDefinition<T> filter = Builders<T>.Filter.Eq(property, id);
 
@@ -251,6 +250,39 @@ namespace CommonLib.DatabaseClient
 
             return sd;
         }
+
+        #region Dictionary Mode
+        public List<Dictionary<string, object>> GetAllItemDict(string tableName)
+        {
+            IMongoCollection<Dictionary<string, object>> collection = db.GetCollection<Dictionary<string, object>>(tableName);
+
+            return collection.Find(transaction, Builders<Dictionary<string, object>>.Filter.Where(d => true)).ToList();
+        }
+
+        public Dictionary<string, object> GetItemDict(string tableName, string property, string id)
+        {
+            IMongoCollection<Dictionary<string, object>> collection = db.GetCollection<Dictionary<string, object>>(tableName);
+            FilterDefinition<Dictionary<string, object>> filter = Builders<Dictionary<string, object>>.Filter.Eq(property, id);
+
+            var rs = collection.Find(transaction, filter).ToList();
+
+            return rs.FirstOrDefault();
+        }
+
+        public List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where)
+        {
+            IMongoCollection<Dictionary<string, object>> collection = db.GetCollection<Dictionary<string, object>>(tableName);
+            FilterDefinition<Dictionary<string, object>> filter = FilterConditionToWhere<Dictionary<string, object>>(where);
+            SortDefinition<Dictionary<string, object>> sort = FilterConditionToSort<Dictionary<string, object>>(where);
+
+            return collection.Find(transaction, filter).Sort(sort).ToList();
+        }
+
+        public List<Dictionary<string, object>> GetItemListDict(string tableName, FilterCondition where)
+        {
+            return GetItemList<Dictionary<string, object>>(tableName, new List<FilterCondition>() { where });
+        }
+        #endregion
     }
 
     public abstract class MongoDBClientBase : MongoDBBase, IMongoDBClientBase

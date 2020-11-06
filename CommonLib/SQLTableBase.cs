@@ -1,12 +1,16 @@
 ﻿using Commonlib.Reflection;
 using CommonLib.TableBasePackage;
 using Dapper;
+using RabbitMQ.Client;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
+using System.Transactions;
 
 namespace CommonLib.SQLTablePackage
 {
@@ -37,7 +41,7 @@ namespace CommonLib.SQLTablePackage
         public string CheckExistKey<T>(T data, string name)
         {
             string key = string.Empty;
-            List<string> kName = TableClass.GetTableFieldName<T>(data);
+            List<string> kName = TableClass.GetTableFieldNames<T>(data);
 
             if (!kName.Exists(d => d == name))
             {
@@ -313,8 +317,6 @@ namespace CommonLib.SQLTablePackage
         int CountItemList<T>(string tableName, string where);
         int ExecuteSql(string sql);
         List<T> QuerySql<T>(string sql);
-
-        bool InsertItem<T>(string tableName, T data, string cols = null);
     }
 
     public abstract class ABSSQLTableBase: ABSTableBase
@@ -324,7 +326,7 @@ namespace CommonLib.SQLTablePackage
 
     public abstract class SQLTableBase : ABSSQLTableBase, ISQLTableBase
     {
-        public Stack<IDbTransaction> transactionList = new Stack<IDbTransaction>();
+        public int stackCount = 0;
         public IDbTransaction transaction = null;
         public IDbConnection conn = null;
         public string connString = string.Empty;
@@ -342,25 +344,29 @@ namespace CommonLib.SQLTablePackage
             {
                 conn.Open();
             }
+            stackCount = 0;
         }
 
         public virtual void BeginTransaction()
         {
-            transaction = conn.BeginTransaction(IsolationLevel.ReadCommitted);
-            transactionList.Push(transaction);
+            stackCount += 1;
+            if (transaction != null && transaction.Connection != null)
+            {
+                return;
+            }
+
+            transaction = conn.BeginTransaction(System.Data.IsolationLevel.ReadCommitted);
         }
 
         public virtual void Dispose()
         {
-            transaction = transactionList.Pop();
-            transaction.Dispose();
-
-            if (transactionList.Count > 0)
+            if(stackCount > 1)
             {
-                transaction = transactionList.First();
+                stackCount -= 1;
                 return;
             }
 
+            transaction.Dispose();
             conn.Close();
         }
 
@@ -373,14 +379,21 @@ namespace CommonLib.SQLTablePackage
                     transaction.Commit();
                 }
             }
+
+            transaction = conn.BeginTransaction(System.Data.IsolationLevel.ReadCommitted);
         }
 
         public virtual void RollBack()
         {
-            if (transaction.Connection != null)
+            if(transaction != null)
             {
-                transaction.Rollback();
+                if (transaction.Connection != null)
+                {
+                    transaction.Rollback();
+                }
             }
+
+            transaction = conn.BeginTransaction(System.Data.IsolationLevel.ReadCommitted);
         }
 
         public void ChangeDataBase(string name)
@@ -400,7 +413,7 @@ namespace CommonLib.SQLTablePackage
 
         public bool InsertItem<T>(string tableName, T data)
         {
-            string cols = tableUtils.JoinStringList(TableClass.GetTableFieldName<T>(data));
+            string cols = tableUtils.JoinStringList(TableClass.GetTableFieldNames<T>(data));
             return InsertItem<T>(tableName, data, cols);
         }
 
@@ -424,7 +437,7 @@ namespace CommonLib.SQLTablePackage
             {
                 return true;
             }
-            string cols = tableUtils.JoinStringList(TableClass.GetTableFieldName<T>(data.First()));
+            string cols = tableUtils.JoinStringList(TableClass.GetTableFieldNames<T>(data.First()));
 
             return InsertItemList(tableName, data, cols);
         }
@@ -494,9 +507,7 @@ namespace CommonLib.SQLTablePackage
         public List<T> GetAllItem<T>(string tableName)
         {
             string sql = string.Format("SELECT * FROM {0} WHERE 1 = 1;", tableName);
-            var list = conn.Query<T>(sql, null, transaction);
-
-            return list.ToList();
+            return conn.Query<T>(sql, null, transaction).ToList();
         }
 
         public bool RemoveAllItem<T>(string tableName)
@@ -549,5 +560,54 @@ namespace CommonLib.SQLTablePackage
         {
             return conn.Query<T>(sql, null, transaction).ToList();
         }
+
+        #region Dicionary Mode
+        public List<Dictionary<string, object>> GetAllItemDict(string tableName)
+        {
+            string sql = string.Format("SELECT * FROM {0} WHERE 1 = 1;", tableName);
+            return conn.QueryDictionary(sql, null, transaction);
+        }
+
+        public Dictionary<string, object> GetItemDict(string tableName, string property, string id)
+        {
+            id = tableUtils.EscapeValue(id);
+
+            string sql = string.Format("SELECT * FROM {0} WHERE {1} = {2};", tableName, property, id);
+            var list = conn.QueryDictionary(sql, null, transaction);
+
+            return list.FirstOrDefault();
+        }
+
+        public virtual List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where)
+        {
+            string filter = tableUtils.FilterConditionToWhere(where);
+            string sort = tableUtils.FilterConditionToSort(where);
+
+            if (sort != string.Empty)
+            {
+                sort = string.Format("ORDER BY {0}", sort);
+            }
+
+            string sql = string.Format("SELECT * FROM {0} WHERE {1} {2};", tableName, filter, sort);
+
+            return conn.QueryDictionary(sql, null, transaction).ToList();
+        }
+
+        public virtual List<Dictionary<string, object>> GetItemListDict(string tableName, FilterCondition where)
+        {
+            List<FilterCondition> filter = new List<FilterCondition>() { where };
+            return GetItemListDict(tableName, filter);
+        }
+        #endregion
     }
+
+    public static class DapperExtension
+    {
+        public static List<Dictionary<string, object>> QueryDictionary(this IDbConnection conn, string sql, object param = null, IDbTransaction transaction = null)
+        {
+            var data = SqlMapper.Query(conn, sql, param, transaction) as IEnumerable<IDictionary<string, object>>;
+            return data.Select(r => r.ToDictionary(k => k.Key, v => v.Value)).ToList();
+        }
+    }
+
 }

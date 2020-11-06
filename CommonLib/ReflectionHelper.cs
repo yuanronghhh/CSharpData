@@ -49,9 +49,26 @@ namespace Commonlib.Reflection
             dataProp.SetValue(data, value);
         }
 
+        public static object GetValueDict(Dictionary<string, object> data, string propName)
+        {
+            if (!data.ContainsKey(propName))
+            {
+                return null;
+            }
+
+            return data[propName];
+        }
+
         public static object GetValue<T>(T data, string propName)
         {
-            PropertyInfo dataProp = GetProperty(data, propName);
+            Type tp = data.GetType();
+
+            if (tp == typeof(Dictionary<string, object>))
+            {
+                return GetValueDict(data as Dictionary<string, object>, propName);
+            }
+
+            PropertyInfo dataProp = tp.GetProperty(propName);
             if (dataProp == null)
             {
                 return null;
@@ -70,5 +87,6 @@ namespace Commonlib.Reflection
             return dataProp.GetValue(data, null);
         }
         #endregion
+
     }
 }
