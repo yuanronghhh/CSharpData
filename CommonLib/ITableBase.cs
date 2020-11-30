@@ -38,6 +38,8 @@ namespace CommonLib.TableBasePackage
 
     public abstract class ABSTableBase
     {
-        public abstract List<T> GetItemList<T>(string tableName, List<FilterCondition> where, PageCondition page);
+        public abstract List<T> GetItemList<T>(string tableName, List<FilterCondition> where, ref PageCondition page);
+
+        public abstract List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where, ref PageCondition page);
     }
 }

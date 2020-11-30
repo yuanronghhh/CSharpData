@@ -24,7 +24,7 @@ namespace CommonLib.DatabaseClient
             tableUtils.SetEscapeChar("\"");
         }
         
-        public override List<T> GetItemList<T>(string tableName, List<FilterCondition> where, PageCondition page)
+        public override List<T> GetItemList<T>(string tableName, List<FilterCondition> where, ref PageCondition page)
         {
             List<T> list;
             string sql = string.Empty;
@@ -41,6 +41,26 @@ namespace CommonLib.DatabaseClient
                 tableName, filter, sort, (page.PageNo - 1) * page.PageSize, page.PageSize);
 
             list = conn.Query<T>(sql, null, transaction).ToList();
+            return list;
+        }
+
+        public override List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where, ref PageCondition page)
+        {
+            List<Dictionary<string, object>> list;
+            string sql = string.Empty;
+            string filter = tableUtils.FilterConditionToWhere(where);
+            string sort = tableUtils.FilterConditionToSort(where);
+
+            if (sort == string.Empty)
+            {
+                throw new Exception("SQL paging without Order");
+            }
+
+            page.Total = CountItemList<Dictionary<string, object>>(tableName, filter);
+            sql = string.Format("SELECT * FROM {0} WHERE {1} ORDER BY {2} LIMIT {3}, {4};",
+                tableName, filter, sort, (page.PageNo - 1) * page.PageSize, page.PageSize);
+
+            list = conn.QueryDictionary(sql, null, transaction).ToList();
             return list;
         }
 

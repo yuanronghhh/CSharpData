@@ -14,7 +14,24 @@ namespace CommonLib.DatabaseClient
         public abstract IConnectionMultiplexer GetConnection(string conStr);
     }
 
-    public abstract class RedisBaseService : ABSRedisBase, IDisposable
+    public interface IRedisBase
+    {
+        bool RemoveItem(string tableName, string key);
+        bool RemoveItemWild(string tableName, string pattern);
+        bool RemoveAllItem(string tableName);
+
+        bool SetItem<T>(string tableName, string key, T obj);
+
+        List<string> GetKeys(string hostAndPort, string name);
+
+        T GetItem<T>(string tableName, string key);
+        List<T> GetItemWild<T>(string tableName, string pattern);
+        List<T> GetItemWild<T>(string tableName, FilterCondition filter);
+        List<T> GetAllItem<T>(string tableName);
+        List<T> GetAllItem<T>(string tableName, List<string> keys);
+    }
+
+    public abstract class RedisBaseService : ABSRedisBase, IRedisBase, IDisposable
     {
         public string connString = string.Empty;
         public IConnectionMultiplexer conn = null;
@@ -246,7 +263,7 @@ namespace CommonLib.DatabaseClient
 
     public abstract class RedisClientBase : RedisBaseService
     {
-        static TaskQueue redisQueue = null;
+        static TaskQueue redisQueue = new TaskQueue();
         static Stack<TaskQueue> redisStack = new Stack<TaskQueue>();
 
         /// <summary>
@@ -262,7 +279,6 @@ namespace CommonLib.DatabaseClient
 
         public void BeginTransaction()
         {
-            redisQueue = new TaskQueue();
             redisStack.Push(redisQueue);
         }
 

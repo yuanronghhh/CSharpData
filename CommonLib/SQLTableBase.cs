@@ -28,8 +28,18 @@ namespace CommonLib.SQLTablePackage
             esChar = eChar;
         }
 
+        public string EscapeIlleagal(string name)
+        {
+            if(name.IndexOf(" ") > -1) { return ""; }
+            name = name.Replace(esChar, "");
+
+            return name;
+        }
+
         public string EscapeValue(string name)
         {
+            name = name.Replace(esChar, "");
+
             if (string.IsNullOrWhiteSpace(name))
             {
                 return string.Empty;
@@ -77,7 +87,7 @@ namespace CommonLib.SQLTablePackage
 
             foreach (var kp in cond)
             {
-                fd = GetGroupFromFilter(fd, kp.Key, kp.Value);
+                fd = GetGroupFromFilter(fd, EscapeIlleagal(kp.Key), kp.Value);
             }
 
             if(fd == string.Empty)
@@ -127,7 +137,7 @@ namespace CommonLib.SQLTablePackage
             if (fd == string.Empty) { return GroupFilter(nfd, withGroup); }
             if(nfd == string.Empty) { return fd; }
 
-            return string.Format("{0} {1} {2}", fd, con, GroupFilter(nfd, withGroup));
+            return string.Format("{0} {1} {2}", fd, EscapeIlleagal(con), GroupFilter(nfd, withGroup));
         }
 
         public string GroupFilterByType(TableFilterType? ft, string fd, string nfd, bool withGroup = false)
@@ -190,37 +200,37 @@ namespace CommonLib.SQLTablePackage
                 case TableCompareType.EQ:
                     {
                         pattern = EscapeValue(s.Pattern.ToString());
-                        return string.Format("{0} = {1}", s.Key, pattern);
+                        return string.Format("{0} = {1}", EscapeIlleagal(s.Key), pattern);
                     }
                 case TableCompareType.GT:
                     {
                         pattern = EscapeValue(s.Pattern.ToString());
-                        return string.Format("{0} > {1}", s.Key, pattern);
+                        return string.Format("{0} > {1}", EscapeIlleagal(s.Key), pattern);
                     }
                 case TableCompareType.GTE:
                     {
                         pattern = EscapeValue(s.Pattern.ToString());
-                        return string.Format("{0} >= {1}", s.Key, pattern);
+                        return string.Format("{0} >= {1}", EscapeIlleagal(s.Key), pattern);
                     }
                 case TableCompareType.LT:
                     {
                         pattern = EscapeValue(s.Pattern.ToString());
-                        return string.Format("{0} < {1}", s.Key, pattern);
+                        return string.Format("{0} < {1}", EscapeIlleagal(s.Key), pattern);
                     }
                 case TableCompareType.LTE:
                     {
                         pattern = EscapeValue(s.Pattern.ToString());
-                        return string.Format("{0} <= {1}", s.Key, pattern);
+                        return string.Format("{0} <= {1}", EscapeIlleagal(s.Key), pattern);
                     }
                 case TableCompareType.NE:
                     {
                         pattern = EscapeValue(s.Pattern.ToString());
-                        return string.Format("{0} <> {1}", s.Key, pattern);
+                        return string.Format("{0} <> {1}", EscapeIlleagal(s.Key), pattern);
                     }
                 case TableCompareType.LIKE:
                     {
                         pattern = EscapeValue(s.Pattern.ToString());
-                        return string.Format("{0} LIKE {1}", s.Key, pattern);
+                        return string.Format("{0} LIKE {1}", EscapeIlleagal(s.Key), pattern);
                     }
                 case TableCompareType.IN:
                     {
@@ -241,12 +251,12 @@ namespace CommonLib.SQLTablePackage
                         }
                         pattern = JoinObjectList(pList);
 
-                        return string.Format("{0} IN ({1})", s.Key, pattern);
+                        return string.Format("{0} IN ({1})", EscapeIlleagal(s.Key), pattern);
                     }
                 default:
                     {
                         pattern = EscapeValue(s.Pattern.ToString());
-                        return string.Format("{0} = {1}", s.Key, pattern);
+                        return string.Format("{0} = {1}", EscapeIlleagal(s.Key), pattern);
                     }
             }
         }
@@ -457,7 +467,7 @@ namespace CommonLib.SQLTablePackage
             string cols = tableUtils.JoinStringList(tableUtils.GetPropertyPair<T>(data, columns));
             id = tableUtils.EscapeValue(id);
 
-            string sql = string.Format("UPDATE {0} SET {1} WHERE {2} = {3};", tableName, cols, property, id);
+            string sql = string.Format("UPDATE {0} SET {1} WHERE {2} = {3};", tableName, cols, tableUtils.EscapeIlleagal(property), id);
 
             return conn.Execute(sql, null, transaction) > 0;
         }
@@ -466,7 +476,7 @@ namespace CommonLib.SQLTablePackage
         {
             id = tableUtils.EscapeValue(id);
 
-            string sql = string.Format("SELECT * FROM {0} WHERE {1} = {2};", tableName, property, id);
+            string sql = string.Format("SELECT * FROM {0} WHERE {1} = {2};", tableName, tableUtils.EscapeIlleagal(property), id);
             var list = conn.Query<T>(sql, null, transaction);
 
             return list.FirstOrDefault();
@@ -498,7 +508,7 @@ namespace CommonLib.SQLTablePackage
             id1 = tableUtils.EscapeValue(id1);
             id2 = tableUtils.EscapeValue(id2);
 
-            string sql = string.Format("SELECT * FROM {0} WHERE {1} = {2} AND {3} = {4};", tableName, property1, id1, property2, id2);
+            string sql = string.Format("SELECT * FROM {0} WHERE {1} = {2} AND {3} = {4};", tableName, tableUtils.EscapeIlleagal(property1), id1, tableUtils.EscapeIlleagal(property2), id2);
             var list = conn.Query<T>(sql, null, transaction);
 
             return list.FirstOrDefault();
@@ -520,7 +530,7 @@ namespace CommonLib.SQLTablePackage
         {
             id = tableUtils.EscapeValue(id);
 
-            string sql = string.Format("DELETE FROM {0} WHERE {1} = {2};", tableName, property, id);
+            string sql = string.Format("DELETE FROM {0} WHERE {1} = {2};", tableName, tableUtils.EscapeIlleagal(property), id);
             return conn.Execute(sql, null, transaction) > 0;
         }
 
@@ -572,7 +582,7 @@ namespace CommonLib.SQLTablePackage
         {
             id = tableUtils.EscapeValue(id);
 
-            string sql = string.Format("SELECT * FROM {0} WHERE {1} = {2};", tableName, property, id);
+            string sql = string.Format("SELECT * FROM {0} WHERE {1} = {2};", tableName, tableUtils.EscapeIlleagal(property), id);
             var list = conn.QueryDictionary(sql, null, transaction);
 
             return list.FirstOrDefault();
@@ -605,7 +615,9 @@ namespace CommonLib.SQLTablePackage
     {
         public static List<Dictionary<string, object>> QueryDictionary(this IDbConnection conn, string sql, object param = null, IDbTransaction transaction = null)
         {
-            var data = SqlMapper.Query(conn, sql, param, transaction) as IEnumerable<IDictionary<string, object>>;
+            IEnumerable<dynamic> result = SqlMapper.Query(conn, sql, param, transaction);
+            var data = result as IEnumerable<IDictionary<string, object>>;
+
             return data.Select(r => r.ToDictionary(k => k.Key, v => v.Value)).ToList();
         }
     }

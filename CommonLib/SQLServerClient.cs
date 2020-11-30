@@ -21,7 +21,29 @@ namespace CommonLib.DatabaseClient
         {
         }
 
-        public override List<T> GetItemList<T>(string tableName, List<FilterCondition> where, PageCondition page)
+        public override List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where, ref PageCondition page)
+        {
+            List<Dictionary<string, object>> list;
+            string sql = string.Empty;
+            string filter = tableUtils.FilterConditionToWhere(where);
+            string sort = tableUtils.FilterConditionToSort(where);
+
+            if (sort == string.Empty)
+            {
+                throw new System.Exception("SQL paging without Order");
+            }
+
+            page.Total = CountItemList<Dictionary<string, object>>(tableName, filter);
+            sql = string.Format(@"SELECT TOP({0}) * FROM (
+                                        SELECT ROW_NUMBER() OVER(ORDER BY {1}) as RowNumber, * FROM {2}
+                                        WHERE {3}
+                                    ) AS t1 WHERE RowNumber > {4};",
+                                    page.PageSize, sort, tableName, filter, (page.PageNo - 1) * page.PageSize);
+            list = conn.QueryDictionary(sql, null, transaction).ToList();
+            return list;
+        }
+
+        public override List<T> GetItemList<T>(string tableName, List<FilterCondition> where, ref PageCondition page)
         {
             List<T> list;
             string sql = string.Empty;

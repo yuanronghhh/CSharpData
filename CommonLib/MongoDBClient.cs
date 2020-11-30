@@ -38,6 +38,7 @@ namespace CommonLib.DatabaseClient
             {
                 return string.Empty;
             }
+            name = name.Replace(esChar, "");
 
             return string.Format("{1}{0}{1}", name, esChar);
         }
@@ -291,7 +292,7 @@ namespace CommonLib.DatabaseClient
         {
         }
 
-        public override List<T> GetItemList<T>(string tableName, List<FilterCondition> where, PageCondition page)
+        public override List<T> GetItemList<T>(string tableName, List<FilterCondition> where, ref PageCondition page)
         {
             IMongoCollection<T> collection = db.GetCollection<T>(tableName);
             FilterDefinition<T> filter = FilterConditionToWhere<T>(where);
@@ -299,6 +300,18 @@ namespace CommonLib.DatabaseClient
 
             page.Total = (int)collection.CountDocuments(transaction, filter);
             List<T> list = collection.Find(transaction, filter).Sort(sort).Skip((page.PageNo - 1) * page.PageSize).Limit(page.PageSize).ToList();
+
+            return list;
+        }
+
+        public override List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where, ref PageCondition page)
+        {
+            IMongoCollection<Dictionary<string, object>> collection = db.GetCollection<Dictionary<string, object>>(tableName);
+            FilterDefinition<Dictionary<string, object>> filter = FilterConditionToWhere<Dictionary<string, object>>(where);
+            SortDefinition<Dictionary<string, object>> sort = FilterConditionToSort<Dictionary<string, object>>(where);
+
+            page.Total = (int)collection.CountDocuments(transaction, filter);
+            List<Dictionary<string, object>> list = collection.Find(transaction, filter).Sort(sort).Skip((page.PageNo - 1) * page.PageSize).Limit(page.PageSize).ToList();
 
             return list;
         }
