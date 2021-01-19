@@ -61,17 +61,17 @@ namespace CommonLib.TableBasePackage
 
     public enum TableCompareType
     {
-        EQ, NE, IN, LT, LTE, GT, GTE, REGEX, TEXT, LIKE, 
+        EQ, NE, IN, NIN, LT, LTE, GT, GTE, REGEX, TEXT, LIKE, STREE
     }
 
     public struct FilterCondition
     {
-        public FilterCondition(string key, TableCompareType? compareType = null, object pattern = null, 
+        public FilterCondition(string key, TableCompareType? compareType = null, object value = null, 
             TableFilterType? filterType = null, TableOrderType? orderType = null, 
             string groupName = "_default", TableFilterType? groupConnection = null)
         {
             Key = key;
-            Pattern = pattern;
+            Value = value;
             CompareType = compareType;
             FilterType = filterType;
             OrderType = orderType;
@@ -81,7 +81,7 @@ namespace CommonLib.TableBasePackage
             Regxv = null;
         }
         public string Key { get; set; }
-        public object Pattern { get; set; }
+        public object Value { get; set; }
         public TableCompareType? CompareType { get; set; }
         public TableFilterType? FilterType { get; set; }
         public TableOrderType? OrderType { get; set; }
@@ -97,12 +97,12 @@ namespace CommonLib.TableBasePackage
                 return Regxv;
             }
 
-            if (Pattern == null)
+            if (Value == null)
             {
                 return null;
             }
 
-            return new Regex(Pattern.ToString(), RegexOptions.Compiled);
+            return new Regex(Value.ToString(), RegexOptions.Compiled);
         }
     }
 
@@ -136,10 +136,11 @@ namespace CommonLib.TableBasePackage
 
             return decorator.Value;
         }
-        public static List<PropertyInfo> GetFieldProperties<T>(T data, Func<PropertyInfo, bool> isFieldHandle)
+        public static List<PropertyInfo> GetFieldProperties<T>(Func<PropertyInfo, bool> isFieldHandle)
         {
-            Type tp = data.GetType();
+            Type tp = typeof(T);
             List<PropertyInfo> Fields = new List<PropertyInfo>();
+            if(isFieldHandle == null) { return Fields; }
 
             foreach (PropertyInfo p in tp.GetProperties())
             {
@@ -153,8 +154,13 @@ namespace CommonLib.TableBasePackage
         }
         public static PropertyInfo GetFieldProperty<T>(T data, string name, Func<PropertyInfo, bool> isFieldHandle)
         {
+            if(string.IsNullOrWhiteSpace(name)) { return null; }
+
             Type tp = data.GetType();
             PropertyInfo p = tp.GetProperty(name);
+            if (isFieldHandle == null) { return p; }
+
+
             if (p == null || !isFieldHandle(p))
             {
                 return null;
@@ -165,6 +171,8 @@ namespace CommonLib.TableBasePackage
 
         public static bool IsPrimaryKey(PropertyInfo p)
         {
+            if (p == null) { return false; }
+
             PrimaryKey decorator;
             object attribute = p.GetCustomAttributes(typeof(PrimaryKey), false).FirstOrDefault();
             if (attribute == null)
@@ -178,6 +186,8 @@ namespace CommonLib.TableBasePackage
 
         public static bool IsTableField(PropertyInfo p)
         {
+            if (p == null) { return false; }
+
             DatabaseFields decorator;
             object attribute = p.GetCustomAttributes(typeof(DatabaseFields), false).FirstOrDefault();
             if (attribute == null)
@@ -188,42 +198,17 @@ namespace CommonLib.TableBasePackage
             decorator = attribute as DatabaseFields;
             return decorator.IsTableField;
         }
+
         public static List<object> GetTableValues<T>(T data)
         {
-            Type tp = typeof(T);
-            if(tp == typeof(Dictionary<string, object>))
-            {
-                return GetTableDictValues(data as Dictionary<string, object>);
-            }
-            else if (tp.IsClass)
-            {
-                List<PropertyInfo> props = GetTableFieldProperties(data);
-                return props.ConvertAll(d => d.GetValue(data, null));
-            }
-            else
-            {
-                return new List<object>();
-            }
+            List<PropertyInfo> props = GetTableFieldProperties<T>();
+            return props.ConvertAll(d => d.GetValue(data, null));
         }
 
-        public static List<string> GetTableFieldNames<T>(T data)
+        public static List<string> GetTableFieldNames<T>()
         {
-            Type tp = typeof(T);
-
-            if(tp == typeof(Dictionary<string, object>))
-            {
-                List<string> props = GetTableDictNames(data as Dictionary<string, object>);
-                return props;
-            } 
-            else if (tp.IsClass)
-            {
-                List<PropertyInfo> props = GetTableFieldProperties(data);
-                return props.ConvertAll(d => d.Name);
-            }
-            else
-            {
-                return new List<string>();
-            }
+            List<PropertyInfo> props = GetTableFieldProperties<T>();
+            return props.ConvertAll(d => d.Name);
         }
         public static bool HasTableProperty<T>(string propName)
         {
@@ -235,15 +220,17 @@ namespace CommonLib.TableBasePackage
 
             return true;
         }
-        public static List<PropertyInfo> GetTableFieldProperties<T>(T data)
+        public static List<PropertyInfo> GetTableFieldProperties<T>()
         {
-            return GetFieldProperties(data, IsTableField);
+            return GetFieldProperties<T>(IsTableField);
         }
 
         #region Dictionary
-        public static List<object> GetTableDictValues(Dictionary<string, object> data)
+        public static List<object> GetTableDictValuesDict(Dictionary<string, object> data)
         {
             List<object> props = new List<object>();
+            if(data == null) { return props; }
+
             foreach (var kp in data)
             {
                 props.Add(kp.Value);
@@ -252,9 +239,11 @@ namespace CommonLib.TableBasePackage
             return props;
         }
 
-        public static List<string> GetTableDictNames(Dictionary<string, object> data)
+        public static List<string> GetTableNamesDict(Dictionary<string, object> data)
         {
             List<string> props = new List<string>();
+            if(data == null) { return props; }
+
             foreach (var kp in data)
             {
                 props.Add(kp.Key);

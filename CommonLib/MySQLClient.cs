@@ -17,8 +17,6 @@ namespace CommonLib.DatabaseClient
 
     public abstract class MySQLClientBase : SQLTableBase, IMySQLBase
     {
-        private SQLTableUtils util = new SQLTableUtils();
-
         public MySQLClientBase(string cStr = null) : base(cStr)
         {
             tableUtils.SetEscapeChar("\"");
@@ -30,43 +28,27 @@ namespace CommonLib.DatabaseClient
             string sql = string.Empty;
             string filter = tableUtils.FilterConditionToWhere(where);
             string sort = tableUtils.FilterConditionToSort(where);
+            object param = tableUtils.FilterConditionToParam(where);
 
-            if (sort == string.Empty)
+            if (string.IsNullOrWhiteSpace(sort))
             {
                 throw new Exception("SQL paging without Order");
             }
 
-            page.Total = CountItemList<T>(tableName, filter);
+            page.Total = CountItemList<T>(tableName, where);
             sql = string.Format("SELECT * FROM {0} WHERE {1} ORDER BY {2} LIMIT {3}, {4};", 
                 tableName, filter, sort, (page.PageNo - 1) * page.PageSize, page.PageSize);
 
-            list = conn.Query<T>(sql, null, transaction).ToList();
-            return list;
-        }
 
-        public override List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where, ref PageCondition page)
-        {
-            List<Dictionary<string, object>> list;
-            string sql = string.Empty;
-            string filter = tableUtils.FilterConditionToWhere(where);
-            string sort = tableUtils.FilterConditionToSort(where);
-
-            if (sort == string.Empty)
-            {
-                throw new Exception("SQL paging without Order");
-            }
-
-            page.Total = CountItemList<Dictionary<string, object>>(tableName, filter);
-            sql = string.Format("SELECT * FROM {0} WHERE {1} ORDER BY {2} LIMIT {3}, {4};",
-                tableName, filter, sort, (page.PageNo - 1) * page.PageSize, page.PageSize);
-
-            list = conn.QueryDictionary(sql, null, transaction).ToList();
+            list = conn.Query<T>(sql, param, transaction).ToList();
             return list;
         }
 
         public bool BulkDataToFile<T>(string fName, List<T> data, string valueEncloseChar = "`")
         {
-            util.SetEscapeChar(valueEncloseChar);
+            if(data == null) { return false; }
+
+            tableUtils.SetEscapeChar(valueEncloseChar);
             using (FileStream fs = File.OpenWrite(fName))
             {
                 using (StreamWriter sw = new StreamWriter(fs))
@@ -74,19 +56,21 @@ namespace CommonLib.DatabaseClient
                     foreach (T d in data)
                     {
                         List<object> vl = TableClass.GetTableValues<T>(d);
-                        string val = util.JoinObjectList(vl);
+                        string val = tableUtils.JoinObjectList(vl);
 
                         sw.WriteLine(val);
                     }
                 }
             }
-            util.SetEscapeChar("\"");
+            tableUtils.SetEscapeChar("\"");
 
             return true;
         }
 
         public bool BulkLoadFromFile(string tableName, string fName, string valueEncloseChar = "`")
         {
+            if (string.IsNullOrWhiteSpace(fName)) { return false; }
+
             fName = fName.Replace("\\", "/");
             string nline = Environment.NewLine == "\n" ? @"\n" : @"\r\n";
 
@@ -95,7 +79,7 @@ INTO TABLE {1}
 FIELDS TERMINATED BY ',' ENCLOSED BY '{2}' ESCAPED BY '\\'
 LINES TERMINATED BY '{3}';", fName, tableName, valueEncloseChar, nline);
 
-            return ExecuteSql(sql) > 0;
+            return Execute(sql) > 0;
         }
     }
 }

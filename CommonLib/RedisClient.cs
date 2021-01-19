@@ -4,16 +4,10 @@ using CommonLib.Utils;
 using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
-using System.Dynamic;
 using System.Linq;
 
 namespace CommonLib.DatabaseClient
 {
-    public abstract class ABSRedisBase
-    {
-        public abstract IConnectionMultiplexer GetConnection(string conStr);
-    }
-
     public interface IRedisBase
     {
         bool RemoveItem(string tableName, string key);
@@ -31,9 +25,8 @@ namespace CommonLib.DatabaseClient
         List<T> GetAllItem<T>(string tableName, List<string> keys);
     }
 
-    public abstract class RedisBaseService : ABSRedisBase, IRedisBase, IDisposable
+    public abstract class RedisBaseService : IRedisBase, IDisposable
     {
-        public string connString = string.Empty;
         public IConnectionMultiplexer conn = null;
         public IDatabase db { get { return conn.GetDatabase(); } }
         public ISubscriber sub { get { return conn.GetSubscriber(); } }
@@ -43,9 +36,24 @@ namespace CommonLib.DatabaseClient
             conn = GetConnection(conStr);
         }
 
+        public virtual IConnectionMultiplexer GetConnection(string connString)
+        {
+            if (conn == null || !conn.IsConnected)
+            {
+                if (string.IsNullOrWhiteSpace(connString))
+                {
+                    return null;
+                }
+                conn = ConnectionMultiplexer.Connect(connString);
+            }
+
+            return conn;
+        }
+
         public virtual void Dispose()
         {
             conn.Close();
+            conn.Dispose();
         }
 
         public void SubscribeItem(string cName, Action<ChannelMessage> handler)
@@ -110,17 +118,9 @@ namespace CommonLib.DatabaseClient
         public List<T> GetItemWild<T>(string tableName, FilterCondition filter)
         {
             List<T> list = new List<T>();
-            if (filter.Pattern == null)  { return new List<T>(); }
+            if (filter.Value == null)  { return new List<T>(); }
 
-            if(filter.CompareType == TableCompareType.EQ)
-            {
-                T obj = GetItem<T>(tableName, filter.Pattern.ToString());
-                if(obj != null) { list.Add(obj); }
-
-                return  list;
-            }
-
-            RedisValue rValue = new RedisValue(filter.Pattern.ToString());
+            RedisValue rValue = new RedisValue(filter.Value.ToString());
 
             foreach (var h in db.HashScan(tableName, rValue))
             {
@@ -140,6 +140,7 @@ namespace CommonLib.DatabaseClient
 
         public List<T> GetAllItem<T>(string tableName, List<string> keys)
         {
+            if(keys == null) { return new List<T>(); }
             RedisValue[] IDs = keys.ConvertAll(d => new RedisValue(d)).ToArray();
 
             List<T> list = new List<T>();
@@ -156,6 +157,8 @@ namespace CommonLib.DatabaseClient
         #region 分页处理
         public List<T> GetItemListBySearchStr<T>(List<T> list, FilterCondition condition)
         {
+            if(list == null) { return new List<T>(); }
+
             return list.FindAll(d =>
             {
                 object val = ReflectionCommon.GetValue(d, condition.Key);
@@ -170,20 +173,21 @@ namespace CommonLib.DatabaseClient
 
         public List<T> GetItemListByConditions<T>(string tableName, List<T> list, List<FilterCondition> filter)
         {
-            List<T> rlist = new List<T>();
+            List<T> result = new List<T>();
             List<T> subList = null;
+            if(filter == null || list == null || list.Count == 0) { return result; }
 
-            for(int i = 0; i < filter.Count; i++)
+            for (int i = 0; i < filter.Count; i++)
             {
                 FilterCondition cond = filter[i];
 
-                if (cond.Pattern != null)
+                if (cond.Value != null)
                 {
-                    cond.CompareType = !cond.Pattern.ToString().Contains("*") ? TableCompareType.EQ : TableCompareType.TEXT;
+                    cond.CompareType = !cond.Value.ToString().Contains("*") ? TableCompareType.EQ : TableCompareType.TEXT;
 
                     if (cond.CompareType == TableCompareType.EQ)
                     {
-                        rlist = rlist.Concat(list.FindAll(d =>
+                        result = result.Concat(list.FindAll(d =>
                         {
                             object val = ReflectionCommon.GetValue(d, cond.Key);
                             if (val == null)
@@ -191,7 +195,7 @@ namespace CommonLib.DatabaseClient
                                 return false;
                             }
 
-                            return cond.Pattern.ToString() == val.ToString();
+                            return cond.Value.ToString() == val.ToString();
                         })).ToList();
                     }
                     else
@@ -199,20 +203,20 @@ namespace CommonLib.DatabaseClient
                         subList = GetItemListBySearchStr(list, cond);
                         if (subList.Count == 0)
                         {
-                            rlist.Clear();
+                            result.Clear();
                             break;
                         }
 
-                        rlist = rlist.Concat(subList).ToList();
+                        result = result.Concat(subList).ToList();
                     }
                 }
                 else
                 {
-                    rlist = list;
+                    result = list;
                 }
             }
 
-            return rlist;
+            return result;
         }
 
         public List<T> GetItemListByRank<T>(string tableName, int pageSize, int pageNo, List<FilterCondition> filter)
@@ -263,7 +267,7 @@ namespace CommonLib.DatabaseClient
 
     public abstract class RedisClientBase : RedisBaseService
     {
-        static TaskQueue redisQueue = new TaskQueue();
+        static TaskQueue redisQueue = null;
         static Stack<TaskQueue> redisStack = new Stack<TaskQueue>();
 
         /// <summary>
@@ -279,15 +283,16 @@ namespace CommonLib.DatabaseClient
 
         public void BeginTransaction()
         {
+            redisQueue = new TaskQueue();
             redisStack.Push(redisQueue);
         }
 
         public override void Dispose()
         {
-            redisQueue = redisStack.Pop();
             if (redisQueue.Count > 0)
             {
                 RollBack();
+                redisStack.Pop();
             }
 
             if (redisStack.Count > 0)
@@ -312,6 +317,11 @@ namespace CommonLib.DatabaseClient
 
         public void RollBack()
         {
+            if(redisQueue == null)
+            {
+                return;
+            }
+
             redisQueue.Clear();
         }
 

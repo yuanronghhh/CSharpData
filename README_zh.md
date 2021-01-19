@@ -1,11 +1,10 @@
 #CSharpDataLib
 
-Simple Data Tool Libaray for Operate Data in C#
-this is a useful tool if you want copy table in database;
+一个简单的`C#`数据操作工具库, 对于简化数据操作非常有用。
 
-## QuickView
+## 介绍
 
-1. Connect Database
+1. 连接数据库
 ```C#
 // Connect
 using (SQLServerClientService  = SQLServerClientService.GetInstance(conn2)) 
@@ -53,7 +52,7 @@ s1.BulkInsertItemListDict("Data", List<Dictionary<string, object>> data);
 s1.InsertItemList("Data", List<Dictionary<string, object>> data);
 ```
 
-## Support
+## 支持
 |    DataBase              | CRUD | Paging   | Batch Insert   | Bulk Insert | 
 |:-------------------------|:-----|:---------|:---------------|:------------|
 |`SQLite`                  |√     |√         |√               |✗            |
@@ -62,7 +61,7 @@ s1.InsertItemList("Data", List<Dictionary<string, object>> data);
 |`Redis`                   |√     |√         |√               |✗            |
 |`MongoDB`                 |√     |√         |√               |✗            |
 
-## Paging
+## 分页
 ```C#
 FilterCondition filter = new FilterCondition("Age", TableCompareType.GTE, 20);
 PageCondition page = new PageCondition(1, 20);
@@ -70,11 +69,9 @@ PageCondition page = new PageCondition(1, 20);
 Dictionary<string, object> d = s1.GetItemList<Data>("Data", filter, ref page);
 ```
 
-## Transaction
-
-Transaction automatic begin when use `GetInstance()` Except `Redis`.
-`Redis` not support transaction, libaray will push operation to a Queue first, 
-and popup execute command after you call `Commit()`.
+## 事务
+除了`Redis`外， 事务在调用`GetInstance`时已经开启，调用`Commit()`和`RollBack()`即可
+`Redis`不支持事务，所以先将数据操作放入队列，当`Commit()`的时候才一起执行。
 
 ```C#
 Dictionary<string, object> d = new Dictionary<string, object>();
@@ -82,18 +79,18 @@ s1.SetItem("S1", d["ID"].ToString(), d);
 s1.Commit();
 ```
 
-## MySQL LoadCsv
+## MySQL 导入Cvs文件
 ```C#
 s1.BulkLoadFromFile("Data", "D:/tmp.csv", "`");
 ```
 
-## Create Script
-in SQLServer, use `GetCreateScript(name, true)` to export a table with index.
+## SQLServer表创建脚本
+在`SQLServer`中, 使用`GetCreateScript(name, true)`即可导出带索引的脚本。
 
-## Notice
-1. use `[TableFields(true)]` in Entity, then libaray will set and find value automatic.
+## 注意
+1. 在实体上使用 `[TableFields(true)]`, 库才能自动匹配数据库字段。
 
-2. for `Mongodb`, add `public ObjectId _id { get; set; }` in property. and add 
-`[BsonIgnoreExtraElements]` in class is needed.
+2. 对于`Mongodb`, 需要在实体上添加`public ObjectId _id { get; set; }`然后在类上
+添加`[BsonIgnoreExtraElements]`以避免报错。
 
-3. You should configure `replication` before use transaction.
+3. `Mongodb` 需要先配置`复制集`才能使用事务。

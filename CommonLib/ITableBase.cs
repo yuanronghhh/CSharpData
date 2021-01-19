@@ -1,45 +1,54 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 
 namespace CommonLib.TableBasePackage
 {
     public interface ITableBase: IDisposable
     {
-        void BeginTransaction();
-        void Commit();
-        void RollBack();
-
         bool InsertItem<T>(string tableName, T data);
         bool InsertItemList<T>(string tableName, List<T> data);
 
-        bool RemoveItem<T>(string tableName, string property, string id);
-        bool RemoveItemList<T>(string tableName, List<FilterCondition> where);
+        bool RemoveItem<T>(string tableName, List<FilterCondition> filter);
+        bool RemoveItem<T>(string tableName, FilterCondition filter);
+        bool RemoveItemList<T>(string tableName, List<FilterCondition> filter);
         bool RemoveAllItem<T>(string tableName);
 
-        bool UpdateItem<T>(string tableName, string property, string id, T data, string[] columns);
+        bool UpdateItem<T>(string tableName, FilterCondition filter, T data, string[] columns);
+        bool UpdateItem<T>(string tableName, FilterCondition filter, string column, object value);
 
-        T GetItem<T>(string tableName, string property, string id);
+        T GetItem<T>(string tableName, List<FilterCondition> filter);
+        T GetItem<T>(string tableName, FilterCondition filter);
 
-        List<T> GetItemList<T>(string tableName, List<FilterCondition> where);
-        List<T> GetItemList<T>(string tableName, FilterCondition where);
+        List<T> GetItemList<T>(string tableName, List<FilterCondition> filter);
+        List<T> GetItemList<T>(string tableName, FilterCondition filter);
 
         List<T> GetAllItem<T>(string tableName);
-        int CountItemList<T>(string tableName, List<FilterCondition> where);
+        int CountItemList<T>(string tableName, List<FilterCondition> filter);
 
-        #region Dictionary Mode
-        List<Dictionary<string, object>> GetAllItemDict(string tableName);
-
-        Dictionary<string, object> GetItemDict(string tableName, string property, string id);
-
-        List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where);
-        List<Dictionary<string, object>> GetItemListDict(string tableName, FilterCondition where);
-        #endregion
+        // Inner Use
+        List<T> Query<T>(string command, object param = null);
+        int Execute(string command, object param);
     }
 
     public abstract class ABSTableBase
     {
-        public abstract List<T> GetItemList<T>(string tableName, List<FilterCondition> where, ref PageCondition page);
+        public abstract List<T> GetItemList<T>(string tableName, List<FilterCondition> filter, ref PageCondition page);
+    }
 
-        public abstract List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where, ref PageCondition page);
+    public static class TableExtend
+    {
+        public static Dictionary<string, object> GetRecord(this IDataReader reader)
+        {
+            IDataRecord rc = reader;
+            Dictionary<string, object> data = new Dictionary<string, object>();
+
+            for (int i = 0; i < rc.FieldCount; i++)
+            {
+                data.Add(rc.GetName(i), rc.GetValue(i));
+            }
+
+            return data;
+        }
     }
 }

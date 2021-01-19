@@ -10,11 +10,12 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>CommonLib</RootNamespace>
     <AssemblyName>CommonLib</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -35,9 +36,20 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
+  <PropertyGroup>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+  </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Bussiness\CommonDAL.cs" />
+    <Compile Include="Bussiness\ConfigClass.cs" />
+    <Compile Include="Bussiness\DataService.cs" />
+    <Compile Include="CliTools.cs" />
+    <Compile Include="CsvHelper.cs" />
+    <Compile Include="CsvTool.cs" />
+    <Compile Include="ElasticsearchClient.cs" />
     <Compile Include="RabbitMQClient.cs" />
     <Compile Include="SocketServer.cs" />
+    <Compile Include="ExcelClientBase.cs" />
     <Compile Include="SQLTableBase.cs" />
     <Compile Include="ITableBase.cs" />
     <Compile Include="MySQLClient.cs" />
@@ -51,13 +63,16 @@
     <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="Elasticsearch.Net">
+      <HintPath>..\packages\Elasticsearch.Net.7.11.1\lib\net461\Elasticsearch.Net.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.CSharp">
       <Private>True</Private>
     </Reference>
-    <Reference Include="System">
-      <Private>True</Private>
+    <Reference Include="Nest">
+      <HintPath>..\packages\NEST.7.11.1\lib\net461\Nest.dll</HintPath>
     </Reference>
-    <Reference Include="System.ComponentModel, Version=4.0.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+    <Reference Include="System">
       <Private>True</Private>
     </Reference>
     <Reference Include="System.ComponentModel.DataAnnotations">
@@ -86,20 +101,26 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Aspose.Cells">
+      <Version>21.4.0</Version>
+    </PackageReference>
     <PackageReference Include="BouncyCastle">
-      <Version>1.8.6.1</Version>
+      <Version>1.8.9</Version>
+    </PackageReference>
+    <PackageReference Include="CsvHelper">
+      <Version>27.0.2</Version>
     </PackageReference>
     <PackageReference Include="Dapper">
-      <Version>2.0.35</Version>
+      <Version>2.0.90</Version>
     </PackageReference>
     <PackageReference Include="DnsClient">
-      <Version>1.4.0-beta-20200912.4</Version>
+      <Version>1.4.0</Version>
     </PackageReference>
     <PackageReference Include="EntityFramework">
       <Version>6.4.4</Version>
     </PackageReference>
     <PackageReference Include="Google.Protobuf">
-      <Version>3.13.0</Version>
+      <Version>3.16.0</Version>
     </PackageReference>
     <PackageReference Include="K4os.Compression.LZ4">
       <Version>1.2.8-beta</Version>
@@ -114,40 +135,40 @@
       <Version>2.0.12</Version>
     </PackageReference>
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces">
-      <Version>5.0.0-rc.2.20475.5</Version>
+      <Version>5.0.0</Version>
     </PackageReference>
     <PackageReference Include="MongoDB.Bson">
-      <Version>2.11.3</Version>
+      <Version>2.12.3</Version>
     </PackageReference>
     <PackageReference Include="MongoDB.Driver">
-      <Version>2.11.3</Version>
+      <Version>2.12.3</Version>
     </PackageReference>
     <PackageReference Include="MongoDB.Driver.Core">
-      <Version>2.11.3</Version>
+      <Version>2.12.3</Version>
     </PackageReference>
     <PackageReference Include="MongoDB.LibMongocrypt">
-      <Version>1.1.0-beta01</Version>
+      <Version>1.2.1</Version>
     </PackageReference>
     <PackageReference Include="MySql.Data">
-      <Version>8.0.22</Version>
+      <Version>8.0.24</Version>
     </PackageReference>
     <PackageReference Include="Newtonsoft.Json">
-      <Version>12.0.3</Version>
+      <Version>13.0.1</Version>
     </PackageReference>
     <PackageReference Include="Pipelines.Sockets.Unofficial">
-      <Version>2.1.16</Version>
+      <Version>2.2.0</Version>
     </PackageReference>
     <PackageReference Include="RabbitMQ.Client">
       <Version>6.2.1</Version>
     </PackageReference>
     <PackageReference Include="SharpCompress">
-      <Version>0.26.0</Version>
+      <Version>0.28.2</Version>
     </PackageReference>
     <PackageReference Include="SSH.NET">
-      <Version>2020.0.0-beta1</Version>
+      <Version>2020.0.1</Version>
     </PackageReference>
     <PackageReference Include="StackExchange.Redis">
-      <Version>2.1.58</Version>
+      <Version>2.2.4</Version>
     </PackageReference>
     <PackageReference Include="Stub.System.Data.SQLite.Core.NetFramework">
       <Version>1.0.113.3</Version>
@@ -159,10 +180,10 @@
       <Version>4.8.2</Version>
     </PackageReference>
     <PackageReference Include="System.Data.SQLite">
-      <Version>1.0.113.5</Version>
+      <Version>1.0.113.7</Version>
     </PackageReference>
     <PackageReference Include="System.Data.SQLite.Core">
-      <Version>1.0.113.5</Version>
+      <Version>1.0.113.7</Version>
     </PackageReference>
     <PackageReference Include="System.Data.SQLite.EF6">
       <Version>1.0.113</Version>
@@ -171,13 +192,13 @@
       <Version>1.0.113</Version>
     </PackageReference>
     <PackageReference Include="System.Diagnostics.PerformanceCounter">
-      <Version>5.0.0-rc.2.20475.5</Version>
+      <Version>5.0.1</Version>
     </PackageReference>
     <PackageReference Include="System.IO.Compression">
       <Version>4.3.0</Version>
     </PackageReference>
     <PackageReference Include="System.IO.Pipelines">
-      <Version>5.0.0-rc.2.20475.5</Version>
+      <Version>5.0.1</Version>
     </PackageReference>
     <PackageReference Include="System.Memory">
       <Version>4.5.4</Version>
@@ -192,7 +213,7 @@
       <Version>4.5.0</Version>
     </PackageReference>
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe">
-      <Version>5.0.0-rc.2.20475.5</Version>
+      <Version>5.0.0</Version>
     </PackageReference>
     <PackageReference Include="System.Runtime.InteropServices.RuntimeInformation">
       <Version>4.3.0</Version>
@@ -210,7 +231,7 @@
       <Version>4.3.2</Version>
     </PackageReference>
     <PackageReference Include="System.Threading.Channels">
-      <Version>5.0.0-rc.2.20475.5</Version>
+      <Version>5.0.0</Version>
     </PackageReference>
     <PackageReference Include="System.Threading.Tasks.Extensions">
       <Version>4.5.4</Version>

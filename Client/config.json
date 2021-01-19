@@ -1,7 +1,0 @@
-﻿{
-    "SQLiteConnStr": "Data Source=D:/GreyHound/PRIVATE/DOWNLOADS/HeidiSQL/lite.db",
-    "SQLServerConnStr": "Data Source = localhost; Initial Catalog = DemoDatabase; Persist Security Info=True;User ID = sa; Password=sa;",
-    "RedisServerConnStr": "localhost:6379",
-    "MongoDBServerConnStr": "mongodb://localhost:27017",
-    "MongoDBDataBase": "DemoDatabase"
-}

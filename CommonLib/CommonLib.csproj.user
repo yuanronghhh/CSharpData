@@ -3,7 +3,4 @@
   <PropertyGroup>
     <ProjectView>ShowAllFiles</ProjectView>
   </PropertyGroup>
-  <PropertyGroup>
-    <EnableSecurityDebugging>false</EnableSecurityDebugging>
-  </PropertyGroup>
 </Project>

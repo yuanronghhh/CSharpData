@@ -29,6 +29,7 @@ namespace Commonlib.Reflection
         public static List<T2> ConvertData<T1, T2>(List<T1> dataList)
         {
             List<T2> t2List = new List<T2>();
+            if(dataList == null) { return t2List; }
 
             foreach (T1 t1 in dataList)
             {
@@ -51,6 +52,8 @@ namespace Commonlib.Reflection
 
         public static object GetValueDict(Dictionary<string, object> data, string propName)
         {
+            if(data == null) { return null; }
+
             if (!data.ContainsKey(propName))
             {
                 return null;
@@ -84,6 +87,8 @@ namespace Commonlib.Reflection
 
         public static object PropertyGetValue<T>(T data, PropertyInfo dataProp)
         {
+            if(data == null || dataProp == null) { return null; }
+
             return dataProp.GetValue(data, null);
         }
         #endregion

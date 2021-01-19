@@ -30,6 +30,8 @@ namespace CommonLib.Utils
     {
         public static string ObjectToString(object obj)
         {
+            if(obj == null) { return ""; }
+
             return JsonConvert.SerializeObject(obj);
         }
 
@@ -40,6 +42,8 @@ namespace CommonLib.Utils
 
         public static byte[] ObjectToBytes(object obj)
         {
+            if (obj == null) { return new byte[] { }; }
+
             BinaryFormatter bf = new BinaryFormatter();
             using (MemoryStream ms = new MemoryStream())
             {

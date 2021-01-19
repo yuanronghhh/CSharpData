@@ -1,18 +1,19 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Net.Sockets;
 using System.Net;
 using System.Threading;
 
 namespace CommonLib.SocketManager
 {
+    public delegate void SendDataHandle();
+
+    public delegate void ReceiveDataHandle(Client client, byte[] data);
+
     public class SocketBase : System.Net.Sockets.Socket
     {
         public IPEndPoint address = null;
-        public int packageSize = 1024;
+        public int psize = 1024;
 
         public SocketBase(SocketType sType, ProtocolType protocolType) :
             base(AddressFamily.InterNetwork, sType, protocolType)
@@ -26,7 +27,7 @@ namespace CommonLib.SocketManager
 
         public void SetPackageSize(int packageSize)
         {
-            this.packageSize = packageSize;
+            this.psize = packageSize;
         }
 
         public void Bind()
@@ -50,7 +51,6 @@ namespace CommonLib.SocketManager
     public class UdpServer : SocketServerBase
     {
         Thread thConn = null;
-        public delegate void ReceiveDataHandle(Client client, byte[] data);
         public ReceiveDataHandle DataReceiveHandle;
 
         public UdpServer(string ip, int port): base(SocketType.Dgram, ProtocolType.Udp)
@@ -59,7 +59,7 @@ namespace CommonLib.SocketManager
             base.Bind();
             this.SetOnData((Client client, byte[] data) =>
             {
-                string message = Encoding.UTF8.GetString(data, 0, this.packageSize);
+                string message = Encoding.UTF8.GetString(data, 0, this.psize);
                 Console.WriteLine("[Data] {0}", message);
             });
         }
@@ -90,7 +90,7 @@ namespace CommonLib.SocketManager
 
             while (true)
             {
-                byte[] data = new byte[this.packageSize];
+                byte[] data = new byte[this.psize];
                 int length = base.ReceiveFrom(data, ref remote);
 
                 Client client = new Client() {
@@ -105,7 +105,6 @@ namespace CommonLib.SocketManager
     public class UdpClient : SocketBase
     {
         Thread thConn = null;
-        public delegate void SendDataHandle();
 
         public UdpClient() : base(SocketType.Dgram, ProtocolType.Udp)
         {

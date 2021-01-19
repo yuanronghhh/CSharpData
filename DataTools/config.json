@@ -1,0 +1,11 @@
+﻿{
+    "SQLiteConnStr": "Data Source=D:/GreyHound/PRIVATE/DOWNLOADS/HeidiSQL/lite.db",
+    "SQLServerConnStr-206": "Data Source = 192.168.1.206; Initial Catalog = RunOne_MS_DB; Persist Security Info=True;User ID = sa; Password=sa;",
+    "SQLServerConnStr-204": "Data Source = 192.168.1.204; Initial Catalog = RunOne_ITS_DB; Persist Security Info=True;User ID = sa; Password=sa;",
+    "SQLServerConnStr-local": "Data Source = 192.168.2.19; Initial Catalog = DemoDataBase; Persist Security Info=True;User ID = sa; Password=sa;",
+    "RedisServerConnStr": "192.168.1.204:6379,password=runone@2016,version=3.2",
+    "MySQLConnStr": "Host=192.168.56.1;Port=3306;User=vbox2;Password=123456;DataBase=DemoDatabase",
+    "MongoDBServerConnStr": "mongodb://192.168.56.1:27017",
+    "MongoDBDataBase": "DemoDatabase",
+    "RabbitMQConnStr.MS-QUEUE": "amqp://vbox1:vbox1@192.168.56.1:5672/"
+}

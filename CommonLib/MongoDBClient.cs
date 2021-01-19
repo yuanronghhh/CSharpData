@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using Commonlib.Reflection;
 using CommonLib.TableBasePackage;
@@ -8,9 +9,6 @@ namespace CommonLib.DatabaseClient
 {
     public abstract class ABSMongoDBTableBase : ABSTableBase
     {
-        public abstract IMongoClient GetConnection(string conStr);
-
-        public abstract IMongoDatabase GetDataBase(string dbname = null);
     }
 
     public interface IMongoDBClientBase
@@ -25,22 +23,25 @@ namespace CommonLib.DatabaseClient
         public Stack<IClientSessionHandle> transactionStack = new Stack<IClientSessionHandle>();
         public IClientSessionHandle transaction = null;
         public IMongoDatabase db = null;
-        public string esChar = "\"";
 
-        public MongoDBBase(string conStr)
+        public MongoDBBase(string connString)
         {
-            conn = GetConnection(conStr);
+            conn = GetConnection(connString);
         }
 
-        public virtual string Escape(string name)
+        public IMongoClient GetConnection(string connString)
         {
-            if (string.IsNullOrWhiteSpace(name))
+            if (conn == null)
             {
-                return string.Empty;
-            }
-            name = name.Replace(esChar, "");
+                if (string.IsNullOrWhiteSpace(connString))
+                {
+                    return null;
+                }
 
-            return string.Format("{1}{0}{1}", name, esChar);
+                conn = new MongoClient(connString);
+            }
+
+            return conn;
         }
 
         public void BeginTransaction()
@@ -90,11 +91,23 @@ namespace CommonLib.DatabaseClient
             return true;
         }
 
-        public bool UpdateItem<T>(string tableName, string property, string id, T data, string[] columns)
+        public bool UpdateItem<T>(string tableName, FilterCondition cond, string column, object value)
         {
             IMongoCollection<T> collection = db.GetCollection<T>(tableName);
-            FilterDefinition<T> filter = Builders<T>.Filter.Eq(property, id);
+            FilterDefinition<T> filter = Builders<T>.Filter.Eq(cond.Key, cond.Value);
             UpdateDefinition<T> update = null;
+
+            update = Builders<T>.Update.AddToSet(column, value);
+
+            return 1 == (int)collection.UpdateOne(transaction, filter, update).ModifiedCount;
+        }
+
+        public bool UpdateItem<T>(string tableName, FilterCondition cond, T data, string[] columns)
+        {
+            IMongoCollection<T> collection = db.GetCollection<T>(tableName);
+            FilterDefinition<T> filter = Builders<T>.Filter.Eq(cond.Key, cond.Value);
+            UpdateDefinition<T> update = null;
+            if (columns == null) { return false; }
 
             foreach (string col in columns)
             {
@@ -104,14 +117,20 @@ namespace CommonLib.DatabaseClient
             return 1 == (int)collection.UpdateOne(transaction, filter, update).ModifiedCount;
         }
 
-        public T GetItem<T>(string tableName, string property, string id)
+        public T GetItem<T>(string tableName, FilterCondition filter)
         {
+            return GetItem<T>(tableName, new List<FilterCondition>() { filter });
+        }
+
+        public T GetItem<T>(string tableName, List<FilterCondition> filter)
+        {
+
             IMongoCollection<T> collection = db.GetCollection<T>(tableName);
-            FilterDefinition<T> filter = Builders<T>.Filter.Eq(property, id);
+            FilterDefinition<T> where = FilterConditionToWhere<T>(filter);
 
-            var rs = collection.Find(transaction, filter).ToList();
+            var rs = collection.Find(transaction, where).FirstOrDefault();
 
-            return rs.FirstOrDefault();
+            return rs;
         }
 
         public List<T> GetAllItem<T>(string tableName)
@@ -121,60 +140,63 @@ namespace CommonLib.DatabaseClient
             return collection.Find(transaction, Builders<T>.Filter.Where(d => true)).ToList();
         }
 
-        public List<T> GetItemList<T>(string tableName, List<FilterCondition> where)
+        public List<T> GetItemList<T>(string tableName, List<FilterCondition> filter)
         {
             IMongoCollection<T> collection = db.GetCollection<T>(tableName);
-            FilterDefinition<T> filter = FilterConditionToWhere<T>(where);
-            SortDefinition<T> sort = FilterConditionToSort<T>(where);
+            FilterDefinition<T> where = FilterConditionToWhere<T>(filter);
+            SortDefinition<T> sort = FilterConditionToSort<T>(filter);
 
-            return collection.Find(transaction, filter).Sort(sort).ToList();
+            return collection.Find(transaction, where).Sort(sort).ToList();
         }
 
-        public List<T> GetItemList<T>(string tableName, FilterCondition where)
+        public List<T> GetItemList<T>(string tableName, FilterCondition filter)
         {
-            return GetItemList<T>(tableName, new List<FilterCondition>() { where });
+            return GetItemList<T>(tableName, new List<FilterCondition>() { filter });
         }
 
         public bool RemoveAllItem<T>(string tableName)
         {
             IMongoCollection<T> collection = db.GetCollection<T>(tableName);
-            FilterDefinitionBuilder<T> filter = Builders<T>.Filter;
 
             return collection.DeleteMany<T>(transaction, d => true).DeletedCount > 0;
         }
 
-        public bool RemoveItem<T>(string tableName, string property, string id)
+        public bool RemoveItem<T>(string tableName, FilterCondition filter)
         {
-            id = Escape(id);
-
-            IMongoCollection<T> collection = db.GetCollection<T>(tableName);
-            FilterDefinitionBuilder<T> filter = Builders<T>.Filter;
-            FilterDefinition<T> fd = filter.Eq(property, id);
-
-            return 1 == (int)collection.DeleteOne(transaction, fd).DeletedCount;
+            return RemoveItem<T>(tableName, new List<FilterCondition>() { filter });
         }
 
-        public bool RemoveItemList<T>(string tableName, List<FilterCondition> where)
+        public bool RemoveItem<T>(string tableName, List<FilterCondition> filter)
         {
             IMongoCollection<T> collection = db.GetCollection<T>(tableName);
-            FilterDefinition<T> fd = FilterConditionToWhere<T>(where);
+            FilterDefinition<T> where = FilterConditionToWhere<T>(filter);
 
-            return (int)collection.DeleteMany(transaction, fd).DeletedCount > 0;
+            return 1 == (int)collection.DeleteOne(transaction, where).DeletedCount;
         }
 
-        public int CountItemList<T>(string tableName, List<FilterCondition> where)
+        public bool RemoveItemList<T>(string tableName, List<FilterCondition> filter)
         {
             IMongoCollection<T> collection = db.GetCollection<T>(tableName);
-            FilterDefinition<T> filter = FilterConditionToWhere<T>(where);
+            FilterDefinition<T> where = FilterConditionToWhere<T>(filter);
 
-            return (int)collection.Find(transaction, filter).CountDocuments();
+            return (int)collection.DeleteMany(transaction, where).DeletedCount > 0;
         }
 
-        public FilterDefinition<T> FilterConditionToWhere<T>(List<FilterCondition> conds)
+        public int CountItemList<T>(string tableName, List<FilterCondition> filter)
         {
-            FilterDefinitionBuilder<T> filter = Builders<T>.Filter;
-            FilterDefinition<T> fd = filter.Empty;
-            foreach (FilterCondition s in conds)
+            IMongoCollection<T> collection = db.GetCollection<T>(tableName);
+            FilterDefinition<T> where = FilterConditionToWhere<T>(filter);
+
+            return (int)collection.CountDocuments(where);
+        }
+
+        public FilterDefinition<T> FilterConditionToWhere<T>(List<FilterCondition> filter)
+        {
+            FilterDefinitionBuilder<T> where = Builders<T>.Filter;
+            FilterDefinition<T> fd = where.Empty;
+            if (filter == null) { return fd; }
+
+            foreach (FilterCondition s in filter)
             {
                 fd = GetFromFilterType<T>(fd, s);
             }
@@ -200,40 +222,40 @@ namespace CommonLib.DatabaseClient
         public FilterDefinition<T> GetFromCompareType<T>(FilterCondition s)
         {
             FilterDefinitionBuilder<T> filter = Builders<T>.Filter;
-            if (s.Pattern == null) { return filter.Empty; }
+            if (s.Value == null) { return filter.Empty; }
 
             switch (s.CompareType)
             {
                 case TableCompareType.EQ:
-                    return filter.Eq(s.Key, s.Pattern);
+                    return filter.Eq(s.Key, s.Value);
                 case TableCompareType.GT:
-                    return filter.Gt(s.Key, s.Pattern);
+                    return filter.Gt(s.Key, s.Value);
                 case TableCompareType.GTE:
-                    return filter.Gte(s.Key, s.Pattern);
+                    return filter.Gte(s.Key, s.Value);
                 case TableCompareType.LT:
-                    return filter.Lt(s.Key, s.Pattern);
+                    return filter.Lt(s.Key, s.Value);
                 case TableCompareType.LTE:
-                    return filter.Lte(s.Key, s.Pattern);
+                    return filter.Lte(s.Key, s.Value);
                 case TableCompareType.NE:
-                    return filter.Ne(s.Key, s.Pattern);
+                    return filter.Ne(s.Key, s.Value);
                 case TableCompareType.REGEX:
                     {
-                        TextSearchOptions so = new TextSearchOptions() { CaseSensitive = false };
-                        return filter.Regex(s.Key, s.Pattern.ToString());
+                        return filter.Regex(s.Key, s.Value.ToString());
                     }
                 case TableCompareType.TEXT:
-                    return filter.Text(s.Pattern.ToString());
+                    return filter.Text(s.Value.ToString());
                 default:
-                    return filter.Eq(s.Key, s.Pattern);
+                    return filter.Eq(s.Key, s.Value);
             }
         }
 
-        public SortDefinition<T> FilterConditionToSort<T>(List<FilterCondition> conds)
+        public SortDefinition<T> FilterConditionToSort<T>(List<FilterCondition> filter)
         {
             SortDefinitionBuilder<T> sort = Builders<T>.Sort;
             SortDefinition<T> sd = null;
+            if (filter == null) { return sd; }
 
-            foreach (FilterCondition s in conds)
+            foreach (FilterCondition s in filter)
             {
                 if(!s.OrderType.HasValue)
                 {
@@ -252,43 +274,20 @@ namespace CommonLib.DatabaseClient
             return sd;
         }
 
-        #region Dictionary Mode
-        public List<Dictionary<string, object>> GetAllItemDict(string tableName)
+        public List<T> Query<T>(string command, object param = null)
         {
-            IMongoCollection<Dictionary<string, object>> collection = db.GetCollection<Dictionary<string, object>>(tableName);
-
-            return collection.Find(transaction, Builders<Dictionary<string, object>>.Filter.Where(d => true)).ToList();
+            throw new System.NotImplementedException();
         }
 
-        public Dictionary<string, object> GetItemDict(string tableName, string property, string id)
+        public int Execute(string command, object param)
         {
-            IMongoCollection<Dictionary<string, object>> collection = db.GetCollection<Dictionary<string, object>>(tableName);
-            FilterDefinition<Dictionary<string, object>> filter = Builders<Dictionary<string, object>>.Filter.Eq(property, id);
-
-            var rs = collection.Find(transaction, filter).ToList();
-
-            return rs.FirstOrDefault();
+            throw new System.NotImplementedException();
         }
-
-        public List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where)
-        {
-            IMongoCollection<Dictionary<string, object>> collection = db.GetCollection<Dictionary<string, object>>(tableName);
-            FilterDefinition<Dictionary<string, object>> filter = FilterConditionToWhere<Dictionary<string, object>>(where);
-            SortDefinition<Dictionary<string, object>> sort = FilterConditionToSort<Dictionary<string, object>>(where);
-
-            return collection.Find(transaction, filter).Sort(sort).ToList();
-        }
-
-        public List<Dictionary<string, object>> GetItemListDict(string tableName, FilterCondition where)
-        {
-            return GetItemList<Dictionary<string, object>>(tableName, new List<FilterCondition>() { where });
-        }
-        #endregion
     }
 
     public abstract class MongoDBClientBase : MongoDBBase, IMongoDBClientBase
     {
-        public MongoDBClientBase(string conStr) : base(conStr)
+        public MongoDBClientBase(string connString) : base(connString)
         {
         }
 
@@ -300,18 +299,6 @@ namespace CommonLib.DatabaseClient
 
             page.Total = (int)collection.CountDocuments(transaction, filter);
             List<T> list = collection.Find(transaction, filter).Sort(sort).Skip((page.PageNo - 1) * page.PageSize).Limit(page.PageSize).ToList();
-
-            return list;
-        }
-
-        public override List<Dictionary<string, object>> GetItemListDict(string tableName, List<FilterCondition> where, ref PageCondition page)
-        {
-            IMongoCollection<Dictionary<string, object>> collection = db.GetCollection<Dictionary<string, object>>(tableName);
-            FilterDefinition<Dictionary<string, object>> filter = FilterConditionToWhere<Dictionary<string, object>>(where);
-            SortDefinition<Dictionary<string, object>> sort = FilterConditionToSort<Dictionary<string, object>>(where);
-
-            page.Total = (int)collection.CountDocuments(transaction, filter);
-            List<Dictionary<string, object>> list = collection.Find(transaction, filter).Sort(sort).Skip((page.PageNo - 1) * page.PageSize).Limit(page.PageSize).ToList();
 
             return list;
         }
