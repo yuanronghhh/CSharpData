@@ -367,14 +367,14 @@ namespace CommonLibTest
                     Aliase = "UpdatedAliase",
                 };
 
-                InitData();
                 if (!sqlBase.UpdateItem(tableName, filter, result, new string[] { "Name", "Aliase" }))
                 {
                     Assert.Fail("UpdateItem Failed");
                 }
+                sqlBase.Commit();
 
                 var obj = sqlBase.GetItem<Data>(tableName, filter);
-
+                
                 Assert.AreEqual(result.ID, obj.ID);
                 Assert.AreEqual(result.Name, obj.Name);
                 Assert.AreEqual(result.Aliase, obj.Aliase);

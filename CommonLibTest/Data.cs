@@ -16,7 +16,7 @@ namespace CommonLibTest.Entity
         public int Age { get; set; }
 
         public string Remark { get; set; }
-
+        [DatabaseFields(true)]
         public string Aliase { get; set; }
     }
 }

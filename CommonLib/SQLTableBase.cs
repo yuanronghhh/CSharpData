@@ -795,6 +795,11 @@ namespace CommonLib.SQLTablePackage
             return conn.Execute(sql, param, transaction);
         }
 
+        public T ExecuteScalar<T>(string sql, object param = null)
+        {
+            return conn.ExecuteScalar<T>(sql, param, transaction);
+        }
+
         public List<T> Query<T>(string sql, object param = null)
         {
             return conn.QueryEntity<T>(sql, param, transaction).ToList();
@@ -934,12 +939,12 @@ namespace CommonLib.SQLTablePackage
             return CountItemList<Dictionary<string, object>>(tableName, filter);
         }
 
-        public List<Dictionary<string, object>> QuerySQLDict(string sql, object param)
+        public List<Dictionary<string, object>> QuerySQLDict(string sql, object param = null)
         {
             return conn.QueryEntity(sql, param, transaction).ToList();
         }
 
-        public Dictionary<string, object> QueryOneSQLDict(string sql, object param)
+        public Dictionary<string, object> QueryOneSQLDict(string sql, object param = null)
         {
             return conn.QueryEntityFirst(sql, param, transaction);
         }
