@@ -5,7 +5,6 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using Commonlib.Reflection;
 using CommonLib.TableData;
-using DnsClient;
 
 /// <summary>
 /// BaseTable 将实体数据如同表一样获取
@@ -61,7 +60,7 @@ namespace CommonLib.TableBasePackage
 
     public enum TableCompareType
     {
-        EQ, NE, IN, NIN, LT, LTE, GT, GTE, REGEX, TEXT, LIKE, STREE
+        IS, EQ, NE, IN, NIN, LT, LTE, GT, GTE, REGEX, TEXT, LIKE, STREE
     }
 
     public struct FilterCondition
@@ -224,7 +223,6 @@ namespace CommonLib.TableBasePackage
         {
             return GetFieldProperties<T>(IsTableField);
         }
-
         #region Dictionary
         public static List<object> GetTableDictValuesDict(Dictionary<string, object> data)
         {

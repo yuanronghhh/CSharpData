@@ -1,16 +1,9 @@
-﻿using StackExchange.Redis;
-using System.Data.SQLite;
+﻿using System.Data.SQLite;
 using System.Data.SqlClient;
 using CommonLib.DatabaseClient;
-using MongoDB.Driver;
 using System.Data;
 using MySql.Data.MySqlClient;
 using System.Collections.Generic;
-using Nest;
-using Elasticsearch.Net;
-using Newtonsoft.Json.Linq;
-using System;
-using System.Linq;
 using Aspose.Cells;
 
 namespace CommonLib.Service
@@ -18,10 +11,12 @@ namespace CommonLib.Service
     #region SQLite
     public class SQLiteClientService : SQLiteClientBase
     {
+        public int stackCount = 0;
         private static Dictionary<string, SQLiteClientService> instanceTable = new Dictionary<string, SQLiteClientService>();
 
         public SQLiteClientService(string connString): base(connString)
         {
+            stackCount = 0;
         }
 
         public static SQLiteClientService GetInstance(string connString = null)
@@ -44,8 +39,7 @@ namespace CommonLib.Service
                 instanceTable.Add(connString, instance);
             }
 
-            instance.BeginTransaction();
-
+            instance.stackCount += 1;
             return instance;
         }
 
@@ -63,16 +57,29 @@ namespace CommonLib.Service
 
             return conn;
         }
+
+        public override void Dispose()
+        {
+            if (stackCount > 1)
+            {
+                stackCount -= 1;
+                return;
+            }
+
+            base.Dispose();
+        }
     }
     #endregion
 
     #region MySQL
     public class MySQLClientService : MySQLClientBase
     {
+        public int stackCount = 0;
         private static Dictionary<string, MySQLClientService> instanceTable = new Dictionary<string, MySQLClientService>();
 
         public MySQLClientService(string connString) : base(connString)
         {
+            stackCount = 0;
         }
 
         public static MySQLClientService GetInstance(string connString = null)
@@ -95,13 +102,19 @@ namespace CommonLib.Service
                 instanceTable.Add(connString, instance);
             }
 
-            if (instance.conn.State != ConnectionState.Open)
-            {
-                instance.conn.Open();
-            }
-            instance.BeginTransaction();
-
+            instance.stackCount += 1;
             return instance;
+        }
+
+        public override void Dispose()
+        {
+            if (stackCount > 1)
+            {
+                stackCount -= 1;
+                return;
+            }
+
+            base.Dispose();
         }
 
         public override IDbConnection GetConnection(string connString)
@@ -125,10 +138,12 @@ namespace CommonLib.Service
     #region  SQLServer
     public class SQLServerClientService : SQLServerClientBase
     {
+        public int stackCount = 0;
         private static Dictionary<string, SQLServerClientService> instanceTable = new Dictionary<string, SQLServerClientService>();
 
         public SQLServerClientService(string connString) : base(connString)
         {
+            stackCount = 0;
         }
 
         public static SQLServerClientService GetInstance(string connString = null)
@@ -150,14 +165,20 @@ namespace CommonLib.Service
                 instance = new SQLServerClientService(connString);
                 instanceTable.Add(connString, instance);
             }
-          
-            if (instance.conn.State != ConnectionState.Open)
-            {
-                instance.conn.Open();
-            }
-            instance.BeginTransaction();
 
+            instance.stackCount += 1;
             return instance;
+        }
+
+        public override void Dispose()
+        {
+            if (stackCount > 1)
+            {
+                stackCount -= 1;
+                return;
+            }
+
+            base.Dispose();
         }
 
         public override IDbConnection GetConnection(string connString)
@@ -180,10 +201,12 @@ namespace CommonLib.Service
     #region RedisServer
     public class RedisClientService : RedisClientBase
     {
+        public int stackCount = 0;
         private static Dictionary<string, RedisClientService> instanceTable = new Dictionary<string, RedisClientService>();
 
         public RedisClientService(string cStr = null) : base(cStr)
         {
+            stackCount = 0;
         }
 
         public static RedisClientService GetInstance(string cStr = null)
@@ -206,9 +229,19 @@ namespace CommonLib.Service
                 instanceTable.Add(cStr, instance);
             }
 
-            instance.BeginTransaction();
-
+            instance.stackCount += 1;
             return instance;
+        }
+
+        public override void Dispose()
+        {
+            if (stackCount > 1)
+            {
+                stackCount -= 1;
+                return;
+            }
+
+            base.Dispose();
         }
     }
     #endregion
@@ -245,46 +278,6 @@ namespace CommonLib.Service
 
             instance.BeginTransaction();
             return instance;
-        }
-    }
-    #endregion
-
-    #region Elasticsearch
-    public class ElasticsearchService : ElasticsearchClientBase
-    {
-        public static Dictionary<string, ElasticsearchService> instanceTable = new Dictionary<string, ElasticsearchService>();
-
-        public ElasticsearchService(List<Uri> connStrings) : base(connStrings)
-        {
-        }
-
-        public static ElasticsearchService GetInstance(string connString = null)
-        {
-            ElasticsearchService instance = null;
-
-            if (connString != null)
-            {
-                if (!instanceTable.TryGetValue(connString, out instance))
-                {
-                    instance = new ElasticsearchService(GetConfig(connString));
-                    instanceTable.Add(connString, instance);
-                }
-            }
-            else
-            {
-                connString = "ElasticsearchStr";
-                instance = new ElasticsearchService(GetConfig(connString));
-                instanceTable.Add(connString, instance);
-            }
-
-            return instance;
-        }
-
-        public static List<Uri> GetConfig(string connStrings)
-        {
-            JArray cfg = ConfigClass.JGet(connStrings) as JArray;
-            if (cfg == null) { return null; }
-            return cfg.Values<string>().ToList().ConvertAll(d => new Uri(d));
         }
     }
     #endregion

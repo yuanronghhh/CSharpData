@@ -16,12 +16,26 @@ namespace CommonLib.Service
                     return _JData;
                 }
 
-                if(!File.Exists(JConfig)) 
+                if(File.Exists(JConfig)) 
                 {
-                    return new Dictionary<string, object>();
+                    _JData = JsonConvert.DeserializeObject<Dictionary<string, object>>( File.ReadAllText(JConfig));                }
+                else
+                {
+                    _JData = new Dictionary<string, object>();
                 }
 
-                _JData = JsonConvert.DeserializeObject<Dictionary<string, object>>( File.ReadAllText(JConfig));                return _JData;            }
+                return _JData;            }
+        }
+
+        public static string CGet(string name)
+        {
+            ConnectionStringSettings value = ConfigurationManager.ConnectionStrings[name];
+            if(value == null)
+            {
+                return "";
+            }
+
+            return value.ConnectionString;
         }
         public static string Get(string name)
         {

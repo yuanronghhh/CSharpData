@@ -7,13 +7,13 @@ namespace Commonlib.Reflection
     public class ReflectionCommon
     {
         #region 公共方法
-        public static T2 ConvertData<T1, T2>(T1 data)
+        public static T2 ConvertData<T1, T2>(T1 data, PropertyInfo[] toProps = null)
         {
             T2 t2Data = Activator.CreateInstance<T2>();
-            PropertyInfo[] props = t2Data.GetType().GetProperties();
+            PropertyInfo[] props = toProps == null ? typeof(T2).GetProperties() : toProps;
             foreach (PropertyInfo m in props)
             {
-                PropertyInfo t1Prop = data.GetType().GetProperty(m.Name);
+                PropertyInfo t1Prop = GetProperty<T1>(m.Name);
                 if (t1Prop == null)
                 {
                     continue;
@@ -31,9 +31,11 @@ namespace Commonlib.Reflection
             List<T2> t2List = new List<T2>();
             if(dataList == null) { return t2List; }
 
+            PropertyInfo[] toProps = typeof(T2).GetProperties();
+
             foreach (T1 t1 in dataList)
             {
-                t2List.Add(ConvertData<T1, T2>(t1));
+                t2List.Add(ConvertData<T1, T2>(t1, toProps));
             }
 
             return t2List;
@@ -43,6 +45,16 @@ namespace Commonlib.Reflection
         {
             PropertyInfo dataProp = data.GetType().GetProperty(propName);
             if (dataProp == null)
+            {
+                return;
+            }
+
+            dataProp.SetValue(data, value);
+        }
+
+        public static void SetValue<T>(T data, PropertyInfo dataProp, object value)
+        {
+            if (dataProp == null || !dataProp.CanWrite)
             {
                 return;
             }
@@ -80,18 +92,44 @@ namespace Commonlib.Reflection
             return dataProp.GetValue(data, null);
         }
 
-        public static PropertyInfo GetProperty<T>(T data, string propName)
+        public static object GetValue<T>(T data, PropertyInfo dataProp)
         {
-            return data.GetType().GetProperty(propName);
-        }
-
-        public static object PropertyGetValue<T>(T data, PropertyInfo dataProp)
-        {
-            if(data == null || dataProp == null) { return null; }
+            if (dataProp == null || !dataProp.CanRead)
+            {
+                return null;
+            }
 
             return dataProp.GetValue(data, null);
         }
-        #endregion
 
+        public static PropertyInfo GetProperty<T>(string propName)
+        {
+            PropertyInfo dataProp = typeof(T).GetProperty(propName);
+            return dataProp;
+        }
+
+        public static List<PropertyInfo> GetFieldProperties<T>(Func<PropertyInfo, bool> isFieldHandle = null)
+        {
+            Type tp = typeof(T);
+            List<PropertyInfo> Fields = new List<PropertyInfo>();
+
+            foreach (PropertyInfo p in tp.GetProperties())
+            {
+                if (isFieldHandle == null)
+                {
+                    Fields.Add(p);
+                }
+                else
+                {
+                    if (isFieldHandle(p))
+                    {
+                        Fields.Add(p);
+                    }
+                }
+            }
+
+            return Fields;
+        }
+        #endregion
     }
 }

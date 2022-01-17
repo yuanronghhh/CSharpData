@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Data.SqlClient;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -59,7 +60,7 @@ namespace CommonLib.SQLTablePackage
                 return string.Empty;
             }
 
-            return string.Format("@{0}", name);
+            return string.Format("{0}", name);
         }
 
         public Dictionary<string, List<FilterCondition>> FilterConditionToGroup(List<FilterCondition> conds)
@@ -120,7 +121,7 @@ namespace CommonLib.SQLTablePackage
 
             foreach (var c in conds)
             {
-                dp.Add("@" + GenUniqParam(c.Key), c.Value);
+                dp.Add("@W_" + GenUniqParam(c.Key), c.Value);
             }
 
             ResetUniqParam();
@@ -226,7 +227,7 @@ namespace CommonLib.SQLTablePackage
             if (s.Value == null) { return string.Empty; }
             string pattern = string.Empty;
 
-            pattern = GenUniqParam(EscapeValue(s.Key));
+            pattern = GenUniqParam("@W_" + EscapeValue(s.Key));
             switch (s.CompareType)
             {
                 case TableCompareType.EQ:
@@ -372,7 +373,14 @@ namespace CommonLib.SQLTablePackage
         bool UpdateItemDict(string tableName, FilterCondition filter, Dictionary<string, object> data, string[] columns);
         bool UpdateItemDict(string tableName, FilterCondition filter, string column, object value);
 
-        List<Dictionary<string, object>> QuerySQLDict(string sql, object param = null);
+        List<Dictionary<string, object>> QueryDict(string sql, object param = null);
+        Dictionary<string, object> QueryDictFirst(string sql, object param = null);
+
+        // Inner Use
+        List<T> Query<T>(string command, object param = null);
+        T QueryFirst<T>(string command, object param = null);
+        int Execute(string command, object param);
+        T ExecuteScalar<T>(string command, object param = null);
     }
 
     public abstract class ABSSQLTableBase: ABSTableBase
@@ -382,7 +390,6 @@ namespace CommonLib.SQLTablePackage
 
     public abstract class SQLTableBase : ABSSQLTableBase, ISQLTableBase
     {
-        public int stackCount = 0;
         public IDbTransaction transaction = null;
         public IDbConnection conn = null;
         public SQLTableUtils tableUtils = new SQLTableUtils();
@@ -418,12 +425,12 @@ namespace CommonLib.SQLTablePackage
             {
                 conn.Open();
             }
-            stackCount = 0;
+
+            BeginTransaction();
         }
 
         public void BeginTransaction()
         {
-            stackCount += 1;
             if (transaction != null && transaction.Connection != null)
             {
                 return;
@@ -434,12 +441,6 @@ namespace CommonLib.SQLTablePackage
                
         public virtual void Dispose()
         {
-            if(stackCount > 1)
-            {
-                stackCount -= 1;
-                return;
-            }
-
             if(transaction != null)
             {
                 transaction.Dispose();
@@ -615,8 +616,9 @@ namespace CommonLib.SQLTablePackage
             string where = tableUtils.FilterConditionToWhere(filter);
             DynamicParameters param = tableUtils.FilterConditionToParam(filter);
 
-            cols.Append(string.Format("{0} = @{0}", tableUtils.GenUniqParam(column)));
-            param.Add(column, value);
+            string nName = tableUtils.GenUniqParam(column);
+            cols.Append(string.Format("{0} = @{1}", column, nName));
+            param.Add(nName, value);
             tableUtils.ResetUniqParam();
 
             sql = string.Format("UPDATE {0} SET {1} WHERE {2};", tableName, cols, where);
@@ -805,11 +807,18 @@ namespace CommonLib.SQLTablePackage
             return conn.QueryEntity<T>(sql, param, transaction).ToList();
         }
 
+        public T QueryFirst<T>(string sql, object param = null)
+        {
+            return conn.QueryFirst<T>(sql, param, transaction);
+        }
+
         /// Stream
-        public IDataReader OpenReader(string tableName, List<string> columns = null)
+        public IDataReader OpenReader(string tableName, List<string> columns = null, List<FilterCondition> filter = null)
         {
             string cols = columns == null ? "*" : tableUtils.JoinStringList(columns);
-            string sql = string.Format(@"SELECT {0} FROM {1}", cols, tableName);
+            string where = tableUtils.FilterConditionToWhere(filter);
+
+            string sql = string.Format(@"SELECT {0} FROM {1} WHERE {2}", cols, tableName, where);
             return conn.ExecuteReader(sql, null, transaction);
         }
 
@@ -912,7 +921,7 @@ namespace CommonLib.SQLTablePackage
                 }
                 value = data[c];
 
-                string kpt = tableUtils.GenUniqParam(c);
+                string kpt = "U_" + tableUtils.GenUniqParam(c);
                
                 cols.Append(string.Format("{0} = @{1},", c, kpt));
                 param.Add(kpt, value);
@@ -921,6 +930,7 @@ namespace CommonLib.SQLTablePackage
             tableUtils.ResetUniqParam();
 
             sql = string.Format("UPDATE {0} SET {1} WHERE {2};", tableName, cols, where);
+
             return conn.Execute(sql, param, transaction) > 0;
         }
 
@@ -939,12 +949,12 @@ namespace CommonLib.SQLTablePackage
             return CountItemList<Dictionary<string, object>>(tableName, filter);
         }
 
-        public List<Dictionary<string, object>> QuerySQLDict(string sql, object param = null)
+        public List<Dictionary<string, object>> QueryDict(string sql, object param = null)
         {
             return conn.QueryEntity(sql, param, transaction).ToList();
         }
 
-        public Dictionary<string, object> QueryOneSQLDict(string sql, object param = null)
+        public Dictionary<string, object> QueryDictFirst(string sql, object param = null)
         {
             return conn.QueryEntityFirst(sql, param, transaction);
         }
@@ -975,7 +985,7 @@ namespace CommonLib.SQLTablePackage
             string vals = tableUtils.JoinStringListParam(columns);
 
             string sql = string.Format("INSERT INTO {0} ( {1} ) VALUES ({2});", tableName, colStr, vals);
-
+            
             return conn.Execute(sql, param, transaction) > 0;
         }
 
@@ -1032,10 +1042,12 @@ namespace CommonLib.SQLTablePackage
 
         public Dictionary<string, object> GetItemDict(string tableName, string property, string id)
         {
+            DynamicParameters dp = new DynamicParameters();
             id = tableUtils.EscapeValue(id);
 
-            string sql = string.Format("SELECT * FROM {0} WHERE {1} = {2};", tableName, property, id);
-            var list = conn.QueryEntity(sql, null, transaction);
+            dp.Add("@" + property, id);
+            string sql = string.Format("SELECT * FROM {0} WHERE {1} = @{2};", tableName, property, property);
+            var list = conn.QueryEntity(sql, dp, transaction);
 
             return list.FirstOrDefault();
         }
@@ -1046,7 +1058,7 @@ namespace CommonLib.SQLTablePackage
         public static List<Dictionary<string, object>> QueryEntity(this IDbConnection conn, string sql, object param = null, IDbTransaction transaction = null)
         {
             IEnumerable<IDictionary<string, object>> result = conn.Query(sql, param, transaction) as IEnumerable<IDictionary<string, object>>;
-            return result.Select(r => r.ToDictionary(k => k.Key, v => v.Value)).ToList();
+            return result.Select(r => new Dictionary<string, object>(r)).ToList();
         }
 
         public static IEnumerable<T> QueryEntity<T>(this IDbConnection conn, string sql, object param = null, IDbTransaction transaction = null)
@@ -1060,7 +1072,9 @@ namespace CommonLib.SQLTablePackage
             if(dn == null) { return dn; }
 
             IDictionary<string, object> result = dn as IDictionary<string, object>;
-            return result.ToDictionary(d => d.Key, e => e.Value);
+            Dictionary<string, object> result2 = new Dictionary<string, object>(result);
+
+            return result2;
         }
 
         public static T QueryEntityFirst<T>(this IDbConnection conn, string sql, object param = null, IDbTransaction transaction = null)

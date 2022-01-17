@@ -5,6 +5,7 @@ using System;
 using System.Reflection;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace CommonLib.RabbitMQ
 {
@@ -36,19 +37,16 @@ namespace CommonLib.RabbitMQ
         public void ListenQosExchangeQueue(string queueName, Func<string, bool> listenQosQueueMethod)
         {
             ManualResetEvent waitHandle = new ManualResetEvent(false);
-            Thread th = new Thread(new ParameterizedThreadStart((obj) =>
+            Task th = new Task(() =>
             {
                 string consumerTag = null;
                 using (IModel channel = GetConnection().CreateModel())
                 {
                     try
                     {
-                        //订阅模式 (有消息到达将被自动接收) 消费者  
                         EventingBasicConsumer consumer = new EventingBasicConsumer(channel);
-                        //输入1，那如果接收一个消息，但是没有应答，则客户端不会收到下一个消息
                         channel.BasicQos(0, 1, false);
 
-                        //注册接收事件  
                         consumer.Received += (ch, ea) =>
                         {
                             byte[] body = ea.Body.ToArray();
@@ -63,29 +61,25 @@ namespace CommonLib.RabbitMQ
                             }
                         };
 
-                        //要释放的资源  
                         consumerTag = channel.BasicConsume(queue: queueName,
-                                            autoAck: false,//和tcp协议的ack一样，为false则服务端必须在收到客户端的回执（ack）后才能删除本条消息
+                                            autoAck: false,
                                             consumer: consumer);
-                        LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType).Info(string.Format(queueName + "侦听开始"));
 
                         waitHandle.WaitOne();
                         waitHandle.Dispose();
                     }
                     catch (Exception ex)
                     {
-                        LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType).Error("侦听异常{0}：" + ex);
                     }
                     finally
                     {
                         if (!string.IsNullOrEmpty(consumerTag))
                         {
-                            channel.BasicCancel(consumerTag);//当不希望继续订阅时,取消订阅(消费者) 
+                            channel.BasicCancel(consumerTag);
                         }
-                        LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType).Info(string.Format(queueName + "侦听结束"));
                     }
                 }
-            }));
+            });
             th.Start();
         }
 
@@ -112,7 +106,6 @@ namespace CommonLib.RabbitMQ
             }
             catch (Exception ex)
             {
-                LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType).Error("推送异常{0}：" + ex);
                 return false;
             }
         }

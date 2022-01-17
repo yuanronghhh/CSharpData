@@ -54,7 +54,6 @@ namespace CommonLib.Service
         public void RollBack()
         {
             sqlServer.RollBack();
-            redis.RollBack();
         }
 
         public T GetItem<T>(string tableName, string key)
@@ -125,7 +124,7 @@ namespace CommonLib.Service
                 return false;
             }
 
-            return redis.RemoveAllItem(tableName);
+            return redis.DeleteKey(tableName);
         }
 
         public Dictionary<string, object> GetItemDict(string tableName, string key)

@@ -58,13 +58,13 @@ namespace CommonLib.DatabaseClient
         {
             if(book != null)
             {
-                book.Dispose();
+                //book.Dispose();
             }
         }
 
         public void Commit()
         {
-            sheet.CloseAccessCache(AccessCacheOptions.All);
+            //sheet.CloseAccessCache(AccessCacheOptions.All);
             book.Save(book.FileName);
         }
 
@@ -74,7 +74,7 @@ namespace CommonLib.DatabaseClient
             if (sheet != null)
             {
                 if (sheet.Name == sheetName) { return; }
-                sheet.CloseAccessCache(AccessCacheOptions.All);
+                //sheet.CloseAccessCache(AccessCacheOptions.All);
                 sheet = book.Worksheets[sheetName];
             }
             else
@@ -87,7 +87,7 @@ namespace CommonLib.DatabaseClient
                 sheet = book.Worksheets.Insert(book.Worksheets.Count + 1, SheetType.Worksheet, sheetName);
                 book.Worksheets.RemoveAt("Evaluation Warning");
 
-                sheet.StartAccessCache(AccessCacheOptions.All);
+                //sheet.StartAccessCache(AccessCacheOptions.All);
             }
 
             if (range.HasValue)

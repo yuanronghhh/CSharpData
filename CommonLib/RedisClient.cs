@@ -5,6 +5,7 @@ using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace CommonLib.DatabaseClient
 {
@@ -12,7 +13,7 @@ namespace CommonLib.DatabaseClient
     {
         bool RemoveItem(string tableName, string key);
         bool RemoveItemWild(string tableName, string pattern);
-        bool RemoveAllItem(string tableName);
+        bool DeleteKey(string tableName);
 
         bool SetItem<T>(string tableName, string key, T obj);
 
@@ -30,10 +31,12 @@ namespace CommonLib.DatabaseClient
         public IConnectionMultiplexer conn = null;
         public IDatabase db { get { return conn.GetDatabase(); } }
         public ISubscriber sub { get { return conn.GetSubscriber(); } }
+        public ITransaction transaction { get; set; }
 
         public RedisBaseService(string conStr)
         {
             conn = GetConnection(conStr);
+            BeginTransaction();
         }
 
         public virtual IConnectionMultiplexer GetConnection(string connString)
@@ -50,8 +53,46 @@ namespace CommonLib.DatabaseClient
             return conn;
         }
 
+        public void BeginTransaction()
+        {
+            if (transaction != null)
+            {
+                return;
+            }
+
+            transaction = db.CreateTransaction();
+        }
+
+        public void Commit()
+        {
+            if(transaction == null)
+            {
+                return;
+            }
+
+            transaction.Execute();
+            transaction = null;
+            
+            BeginTransaction();
+        }
+
+        public void RollBack()
+        {
+            if (transaction == null)
+            {
+                return;
+            }
+
+            BeginTransaction();
+        }
+
         public virtual void Dispose()
         {
+            if (transaction != null)
+            {
+                transaction = null;
+            }
+
             conn.Close();
             conn.Dispose();
         }
@@ -68,7 +109,8 @@ namespace CommonLib.DatabaseClient
 
         public virtual bool RemoveItem(string tableName, string key)
         {
-            return db.HashDelete(tableName, key);
+            transaction.HashDeleteAsync(tableName, key);
+            return true;
         }
 
         public virtual bool RemoveItemWild(string tableName, string pattern)
@@ -76,21 +118,37 @@ namespace CommonLib.DatabaseClient
             RedisValue rValue = new RedisValue(pattern);
             foreach (HashEntry he in db.HashScan(tableName, rValue))
             {
-                if (!db.HashDelete(tableName, he.Name))
-                {
-                    continue;
-                }
+                RemoveItem(tableName, he.Name);
             }
 
             return true;
         }
-        public virtual bool RemoveAllItem(string tableName)
+
+        public virtual bool DeleteKey(string tableName)
         {
-            return db.KeyDelete(tableName);
+            transaction.KeyDeleteAsync(tableName);
+            return true;
         }
+
+        public virtual bool SetItemList<T>(string tableName, string key, List<T> obj)
+        {
+            foreach (var o in obj)
+            {
+                SetItem(tableName, key, o);
+            }
+
+            return true;
+        }
+
         public virtual bool SetItem<T>(string tableName, string key, T obj)
         {
-            return db.HashSet(tableName, key, DataConvert.ObjectToString(obj));
+            transaction.HashSetAsync(tableName, key, DataConvert.ObjectToString(obj));
+            return true;
+        }
+
+        public virtual long Count(string tableName)
+        {
+            return db.HashLength(tableName);
         }
 
         public List<string> GetKeys(string hostAndPort, string name)
@@ -101,7 +159,7 @@ namespace CommonLib.DatabaseClient
 
         public T GetItem<T>(string tableName, string key)
         {
-            RedisValue rv = db.HashGet(tableName, key);
+            RedisValue rv = db.HashGetAsync(tableName, key).Result;
             if (!rv.HasValue) return default(T);
             return DataConvert.StringToObject<T>(rv);
         }
@@ -267,106 +325,8 @@ namespace CommonLib.DatabaseClient
 
     public abstract class RedisClientBase : RedisBaseService
     {
-        static TaskQueue redisQueue = null;
-        static Stack<TaskQueue> redisStack = new Stack<TaskQueue>();
-
-        /// <summary>
-        /// 使用redis服务需要注意：
-        /// 1. 删除/新增，会放入队列，所以必须Commit才能生效, 不需要时可以RollBack
-        /// 2. 如果使用了删除/新增，GetItem时是没有删掉的
-        /// 3. 所有删除/新增操作均返回true, 没有false
-        /// </summary>
-        /// <param name="conStr"></param>
         public RedisClientBase(string conStr = null) : base(conStr)
         {
-        }
-
-        public void BeginTransaction()
-        {
-            redisQueue = new TaskQueue();
-            redisStack.Push(redisQueue);
-        }
-
-        public override void Dispose()
-        {
-            if (redisQueue.Count > 0)
-            {
-                RollBack();
-                redisStack.Pop();
-            }
-
-            if (redisStack.Count > 0)
-            {
-                redisQueue = redisStack.First();
-                return;
-            }
-
-            base.Dispose();
-        }
-
-        public void Commit()
-        {
-            TaskQueueData qd;
-
-            while (redisQueue.Count > 0)
-            {
-                qd = (TaskQueueData)redisQueue.Dequeue();
-                qd.method(qd.param);
-            }
-        }
-
-        public void RollBack()
-        {
-            if(redisQueue == null)
-            {
-                return;
-            }
-
-            redisQueue.Clear();
-        }
-
-        public override bool RemoveItem(string tableName, string key)
-        {
-            Action<object[]> method = new Action<object[]>(d =>
-            {
-                base.RemoveItem(tableName, key);
-            });
-
-            redisQueue.EnqueueTask(method, tableName, key);
-            return true;
-        }
-
-        public override bool RemoveItemWild(string tableName, string pattern)
-        {
-            Action<object[]> method = new Action<object[]>(d =>
-            {
-                base.RemoveItemWild(tableName, pattern);
-            });
-
-            redisQueue.EnqueueTask(method, tableName, pattern);
-            return true;
-        }
-
-        public override bool RemoveAllItem(string tableName)
-        {
-            Action<object[]> method = new Action<object[]>(d =>
-            {
-                base.RemoveAllItem(tableName);
-            });
-
-            redisQueue.EnqueueTask(method, tableName);
-            return true;
-        }
-
-        public override bool SetItem<T>(string tableName, string key, T obj)
-        {
-            Action<object[]> method = new Action<object[]>(d =>
-            {
-                base.SetItem<T>(tableName, key, obj);
-            });
-
-            redisQueue.EnqueueTask(method, key, obj);
-            return true;
         }
     }
 }

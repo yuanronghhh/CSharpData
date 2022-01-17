@@ -46,6 +46,11 @@ namespace CommonLib.DatabaseClient
 
         public void BeginTransaction()
         {
+            if(transaction != null)
+            {
+                return;
+            }
+
             transaction = conn.StartSession();
             transaction.StartTransaction(new TransactionOptions(
                 readConcern: ReadConcern.Snapshot,
@@ -63,7 +68,7 @@ namespace CommonLib.DatabaseClient
             transaction.AbortTransaction();
         }
 
-        public void Dispose()
+        public virtual void Dispose()
         {
             transaction = transactionStack.Pop();
             transaction.Dispose();
@@ -272,16 +277,6 @@ namespace CommonLib.DatabaseClient
             }
 
             return sd;
-        }
-
-        public List<T> Query<T>(string command, object param = null)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public int Execute(string command, object param)
-        {
-            throw new System.NotImplementedException();
         }
     }
 

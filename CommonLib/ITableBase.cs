@@ -25,10 +25,6 @@ namespace CommonLib.TableBasePackage
 
         List<T> GetAllItem<T>(string tableName);
         int CountItemList<T>(string tableName, List<FilterCondition> filter);
-
-        // Inner Use
-        List<T> Query<T>(string command, object param = null);
-        int Execute(string command, object param);
     }
 
     public abstract class ABSTableBase

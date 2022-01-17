@@ -3,6 +3,7 @@ using System;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.IO;
 using Newtonsoft.Json;
+using System.Collections.Concurrent;
 
 namespace CommonLib.Utils
 {
@@ -12,7 +13,7 @@ namespace CommonLib.Utils
         public object[] param { get; set; }
     }
 
-    public class TaskQueue : Queue
+    public class TaskQueue : ConcurrentQueue<TaskQueueData>
     {
         public void EnqueueTask(Action<object[]> method, params object[] param)
         {

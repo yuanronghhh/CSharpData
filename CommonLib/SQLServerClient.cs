@@ -36,7 +36,7 @@ namespace CommonLib.DatabaseClient
 	            ) AS o1 ON o.parent_obj = o1.id
 	            WHERE o.type IN ('F', 'K') ORDER BY o.type;");
 
-            return QuerySQLDict(sql, null);
+            return QueryDict(sql, null);
         }
 
         public List<Dictionary<string, object>> GetAllUserTypes()
@@ -48,7 +48,7 @@ namespace CommonLib.DatabaseClient
                                         LEFT JOIN sys.types AS t2 ON t1.system_type_id = t2.user_type_id
                                         WHERE t1.SCHEMA_ID = 1");
 
-            return QuerySQLDict(sql, null);
+            return QueryDict(sql, null);
         }
 
         public bool DropTable(string tableName)
@@ -61,6 +61,15 @@ namespace CommonLib.DatabaseClient
         {
             string sql = string.Format("IF OBJECT_ID('{0}', N'U') IS NOT NULL BEGIN Truncate TABLE {0} END;", tableName);
             return conn.Execute(sql, null, transaction) > 0;
+        }
+
+        public int GetTableAboutRowCount(string tableName)
+        {
+            string sql = string.Format(@"SELECT i.rowcnt FROM sys.objects AS o
+                    INNER JOIN sys.sysindexes AS i ON i.id = o.object_id
+                        WHERE o.type = 'U' AND i.indid IN(0,1) AND o.name = '{0}';", tableName);
+
+            return conn.ExecuteScalar<int>(sql, null, transaction);
         }
 
         public string GetCreateScript(string tableName, bool checkExists = false)
@@ -396,6 +405,26 @@ namespace CommonLib.DatabaseClient
             }
 
             sqlBulkCopy.WriteToServer(dTable);
+            return true;
+        }
+
+        public bool BulkInsertWithReader(string tableName, IDataReader dataReader, List<string> columns = null)
+        {
+            SqlTransaction strans = transaction as SqlTransaction;
+            SqlConnection sconn = conn as SqlConnection;
+            SqlBulkCopy sqlBulkCopy = new SqlBulkCopy(sconn, SqlBulkCopyOptions.TableLock, strans);
+            sqlBulkCopy.DestinationTableName = tableName;
+
+            if(columns != null)
+            {
+                foreach (string prop in columns)
+                {
+                    sqlBulkCopy.ColumnMappings.Add(prop, prop);
+                }
+            }
+
+            sqlBulkCopy.WriteToServer(dataReader);
+
             return true;
         }
     }

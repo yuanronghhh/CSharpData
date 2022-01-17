@@ -17,7 +17,7 @@ namespace CommonLib.Utils
             if(dyn == null) { return null; }
 
             result = dyn as IDictionary<string, object>;
-            return result.ToDictionary(d => d.Key, e => e.Value);
+            return new Dictionary<string, object>(result);
         }
 
         public static List<Dictionary<string, object>> GetRecords(this CsvReader reader)
@@ -27,7 +27,7 @@ namespace CommonLib.Utils
             IEnumerable<IDictionary<string, object>> result = reader.GetRecords<dynamic>() as IEnumerable<IDictionary<string, object>>;
             if(result == null) { return new List<Dictionary<string, object>>(); }
 
-            return result.Select(r => r.ToDictionary(k => k.Key, v => v.Value)).ToList();
+            return result.Select(r => new Dictionary<string, object>(r)).ToList();
         }
     }
 
