@@ -4,6 +4,7 @@ using Dapper;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Reflection;
@@ -11,6 +12,18 @@ using System.Transactions;
 
 namespace CommonLib.DatabaseClient
 {
+    public static class SqlBulkCopyExtension
+    {
+        const string _rowsCopiedFieldName = "_rowsCopied";
+        static FieldInfo _rowsCopiedField = null;
+
+        public static int RowsCopied(this SqlBulkCopy bulkCopy)
+        {
+            if (_rowsCopiedField == null) _rowsCopiedField = typeof(SqlBulkCopy).GetField(_rowsCopiedFieldName, BindingFlags.NonPublic | BindingFlags.GetField | BindingFlags.Instance);
+            return (int)_rowsCopiedField.GetValue(bulkCopy);
+        }
+    }
+
     public interface ISQLServerBase
     {
         List<T> GetItemList<T>(string tableName, List<FilterCondition> where, ref PageCondition page, List<string> columns = null);
@@ -63,6 +76,15 @@ namespace CommonLib.DatabaseClient
             return conn.Execute(sql, null, transaction) > 0;
         }
 
+        public List<Dictionary<string, object>> GetTableNamesWithColumnName(string cName)
+        {
+            string sql = string.Format(@"SELECT DISTINCT t.name AS TableName FROM sys.columns AS c
+                                        INNER JOIN sys.tables AS t ON t.object_id = c.object_id
+                                        WHERE c.name = '{0}';", cName);
+
+            return QueryDict(sql, null);
+        }
+
         public int GetTableAboutRowCount(string tableName)
         {
             string sql = string.Format(@"SELECT i.rowcnt FROM sys.objects AS o
@@ -70,6 +92,18 @@ namespace CommonLib.DatabaseClient
                         WHERE o.type = 'U' AND i.indid IN(0,1) AND o.name = '{0}';", tableName);
 
             return conn.ExecuteScalar<int>(sql, null, transaction);
+        }
+
+        public class SQLCreateClass
+        {
+            /// <summary>
+            /// 
+            /// </summary>
+            public string Script { get; set; }
+            /// <summary>
+            /// 
+            /// </summary>
+            public string script { get; set; }
         }
 
         public string GetCreateScript(string tableName, bool checkExists = false)
@@ -219,10 +253,7 @@ namespace CommonLib.DatabaseClient
                             SELECT @SQL AS script;", tableName);
             string script;
 
-            Dictionary<string, object> obj = conn.QueryEntityFirst(sql, null, transaction);
-            if (obj == null || !obj.ContainsKey("script") || obj["script"] == null) { return null; }
-
-            script = obj["script"].ToString();
+            script = conn.ExecuteScalar<string>(sql, null, transaction);
             if (script == null) { return null; }
 
             if (checkExists)
@@ -233,7 +264,7 @@ namespace CommonLib.DatabaseClient
                                         END", tableName, script);
             }
 
-            return script;
+            return script.Replace("\r", "\r\n");
         }
 
         public override List<T> GetItemList<T>(string tableName, List<FilterCondition> where, ref PageCondition page)
@@ -408,7 +439,7 @@ namespace CommonLib.DatabaseClient
             return true;
         }
 
-        public bool BulkInsertWithReader(string tableName, IDataReader dataReader, List<string> columns = null)
+        public bool BulkInsertWithReader(string tableName, DbDataReader dataReader, List<string> columns = null)
         {
             SqlTransaction strans = transaction as SqlTransaction;
             SqlConnection sconn = conn as SqlConnection;

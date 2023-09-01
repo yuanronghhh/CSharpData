@@ -1,16 +1,16 @@
-﻿using CommonLib.TableBasePackage;
+﻿using Commonlib.Reflection;
+using CommonLib.TableBasePackage;
+using CommonLib.TableData;
 using Dapper;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Data.SqlClient;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text;
-using System.Transactions;
+using static Dapper.SqlMapper;
 
 namespace CommonLib.SQLTablePackage
 {
@@ -19,6 +19,35 @@ namespace CommonLib.SQLTablePackage
         public string esChar = "\'";
 
         public int Index = 0;
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="p"></param>
+        /// <returns></returns>
+        public bool IsPrimaryKey(PropertyInfo p)
+        {
+            if (p == null) { return false; }
+
+            PrimaryKey decorator;
+            object attribute = p.GetCustomAttributes(typeof(PrimaryKey), false).FirstOrDefault();
+            if (attribute == null)
+            {
+                return false;
+            }
+
+            decorator = attribute as PrimaryKey;
+            return decorator.IsPrimaryKey;
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public List<PropertyInfo> GetPrimaryKeyFields<T>()
+        {
+            return ReflectionCommon.GetFieldProperties<T>(IsPrimaryKey);
+        }
 
         public void ResetUniqParam()
         {
@@ -119,7 +148,7 @@ namespace CommonLib.SQLTablePackage
 
             DynamicParameters dp = new DynamicParameters();
 
-            foreach (var c in conds)
+            foreach (var c in conds.Where(d => !d.OrderType.HasValue))
             {
                 dp.Add("@W_" + GenUniqParam(c.Key), c.Value);
             }
@@ -346,6 +375,26 @@ namespace CommonLib.SQLTablePackage
 
             return vals;
         }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public string GetTableName<T>()
+        {
+            Type tp = typeof(T);
+            TableName decorator;
+
+            var attribute = tp.GetCustomAttributes(typeof(TableName), false).FirstOrDefault();
+            if (attribute == null)
+            {
+                return "";
+            }
+            decorator = attribute as TableName;
+
+            return decorator.Value;
+        }
     }
 
     public interface ISQLTableBase: ITableBase
@@ -411,6 +460,70 @@ namespace CommonLib.SQLTablePackage
 
         public struct DeleteQuery
         {
+        }
+
+        public struct UpdateQuery
+        {
+            public DynamicParameters Param;
+            public string UpdateValues;
+            public string Filters;
+        }
+
+        private UpdateQuery GetUpdateQuery<T>(T data, string[] columns, string where = null)
+        {
+            UpdateQuery QData = new UpdateQuery();
+            if (columns == null || data == null) { return QData; }
+
+            StringBuilder updateValues = new StringBuilder();
+            DynamicParameters dp = new DynamicParameters();
+            List<PropertyInfo> ps;
+
+            Type tp = typeof(T);
+            int gint = 0;
+            for (int i = 0; i < columns.Length; i++)
+            {
+                gint++;
+                var kp = columns[i];
+                PropertyInfo prop = tp.GetProperty(kp);
+                if (prop == null)
+                {
+                    continue;
+                }
+
+                object o = prop.GetValue(data);
+                string fpk = string.Format("{0}_{1}", kp,  gint);
+
+                updateValues.Append(string.Format("{0} = @{1},", kp, fpk));
+                dp.Add("@" + fpk, o);
+            }
+            updateValues.Remove(updateValues.Length - 1, 1);
+            QData.UpdateValues = updateValues.ToString();
+
+            if (string.IsNullOrWhiteSpace(where))
+            {
+                StringBuilder fts = new StringBuilder();
+                ps = tableUtils.GetPrimaryKeyFields<T>();
+                for (int j = 0; j < ps.Count; j++)
+                {
+                    gint++;
+                    var pk = ps[j];
+                    object o = ReflectionCommon.GetValue(data, pk);
+                    string fpk = string.Format("{0}_{1}", pk.Name, gint);
+
+                    fts.Append(string.Format("{0} = @{1},", pk.Name, fpk));
+                    dp.Add("@" + fpk, o);
+                }
+                fts.Remove(fts.Length - 1, 1);
+
+                QData.Filters = fts.ToString();
+            }
+            else
+            {
+                QData.Filters = where;
+            }
+            QData.Param = dp;
+
+            return QData;
         }
 
         public void SetEscapeChar(string esChar)
@@ -546,6 +659,63 @@ namespace CommonLib.SQLTablePackage
             return InsertItem<T>(tableName, data, cols);
         }
 
+        public int UpdateByColumn(string tableName, string column, string value, string where)
+        {
+            if (string.IsNullOrWhiteSpace(column)) { return 0; }
+            if (string.IsNullOrWhiteSpace(value)) { return 0; }
+            if (string.IsNullOrWhiteSpace(tableName)) { return 0; }
+            if (string.IsNullOrWhiteSpace(where)) { return 0; }
+
+            DynamicParameters dp = new DynamicParameters();
+            string sql = string.Format("UPDATE {0} SET {1}=@{2} WHERE {3};", tableName, column, column, where);
+
+            dp.Add(column, value);
+
+            return conn.Execute(sql, dp, transaction);
+        }
+
+        /// <summary>
+        /// 使用data更新表中的数据，columns为需要更新的字段，类似伪码
+        ///     UPDATE <tableName> SET column[0] = data.Column0 WHERE <where>/primarykey
+        ///     
+        /// TableName 和 实体名称 不关联，比如，有实体A, A上有 A.IsEnable = 1，B 表上也有 IsEnable 的字段，tableName 传入 B，实体传入 A.
+        /// 如果需要更加常用的关联方法，请看 UpdateByColumns 的另一个重载
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="sqlService"></param>
+        /// <param name="tableName"></param>
+        /// <param name="data">值对象，SET更新的值将从这个实体中获取</param>
+        /// <param name="columns"></param>
+        /// <param name="where"></param>
+        /// <returns></returns>
+        public int UpdateByColumns<T>(string tableName, T data, string[] columns, string where = null)
+        {
+            UpdateQuery uq = GetUpdateQuery<T>(data, columns, where);
+
+            string sql = string.Format("UPDATE {0} SET {1} WHERE {2};", tableName, uq.UpdateValues, uq.Filters);
+
+            return conn.Execute(sql, uq.Param, transaction);
+        }
+
+        /// <summary>
+        /// 使用data更新表中的数据，columns为需要更新的字段，类似伪码
+        ///     UPDATE <tableName> SET column[0] = data.Column0 WHERE <where>/primarykey
+        ///     
+        /// TableName 和 实体名称 不关联，比如，有实体A, A上有 A.IsEnable = 1，B 表上也有 IsEnable 的字段，tableName 传入 B，实体传入 A.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="sqlService"></param>
+        /// <param name="data">值对象，更新的值将从这个实体中获取</param>
+        /// <param name="columns"></param>
+        /// <param name="where"></param>
+        /// <returns></returns>
+        public int UpdateByColumns<T>(T data, string[] columns, string where = null)
+        {
+            string tableName = tableUtils.GetTableName<T>();
+
+            return UpdateByColumns<T>(tableName, data, columns, where);
+        }
+
         public void DebugData(string data)
         {
             double size = Encoding.Default.GetBytes(data).Length / 1024.0 / 1024.0;
@@ -582,7 +752,7 @@ namespace CommonLib.SQLTablePackage
             foreach (var d in data)
             {
                 DynamicParameters dp = new DynamicParameters();
-                Type tp = data.GetType();
+                Type tp = typeof(T);
 
                 foreach (var p in cols)
                 {
@@ -594,7 +764,7 @@ namespace CommonLib.SQLTablePackage
 
                     if (cols.Exists(c => c == prop.Name))
                     {
-                        object obj = prop.GetValue(data);
+                        object obj = prop.GetValue(d);
                         dp.Add(tableUtils.GenUniqParam(p), obj);
                     }
                 }
@@ -813,13 +983,9 @@ namespace CommonLib.SQLTablePackage
         }
 
         /// Stream
-        public IDataReader OpenReader(string tableName, List<string> columns = null, List<FilterCondition> filter = null)
+        public DbDataReader OpenReader(string sql)
         {
-            string cols = columns == null ? "*" : tableUtils.JoinStringList(columns);
-            string where = tableUtils.FilterConditionToWhere(filter);
-
-            string sql = string.Format(@"SELECT {0} FROM {1} WHERE {2}", cols, tableName, where);
-            return conn.ExecuteReader(sql, null, transaction);
+            return conn.ExecuteReader(sql, null, transaction) as DbDataReader;
         }
 
         /// Dictionary Mode
@@ -952,6 +1118,27 @@ namespace CommonLib.SQLTablePackage
         public List<Dictionary<string, object>> QueryDict(string sql, object param = null)
         {
             return conn.QueryEntity(sql, param, transaction).ToList();
+        }
+
+        public List<List<Dictionary<string, object>>> QueryMultipleDict(string sql, DynamicParameters param = null)
+        {
+            List<List<Dictionary<string, object>>> list = new List<List<Dictionary<string, object>>>();
+
+            using (GridReader dg = conn.QueryMultiple(sql, param, transaction))
+            {
+                while (true)
+                {
+                    if (dg.IsConsumed == true)
+                    {
+                        break;
+                    }
+
+                    List<Dictionary<string, object>> result = dg.Read<dynamic>().Select(d => new Dictionary<string, object>(d)).ToList();
+                    list.Add(result);
+                }
+            }
+
+            return list;
         }
 
         public Dictionary<string, object> QueryDictFirst(string sql, object param = null)

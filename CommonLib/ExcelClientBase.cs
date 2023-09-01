@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using Aspose.Cells;
+using Commonlib.Reflection;
 using CommonLib.SQLTablePackage;
 using CommonLib.TableBasePackage;
 using Dapper;
@@ -68,13 +71,12 @@ namespace CommonLib.DatabaseClient
             book.Save(book.FileName);
         }
 
-        public void ChangeSheet(string sheetName, CellRange? range = null)
+        public bool ChangeSheet(string sheetName, CellRange? range = null, bool insertNew = false)
         {
-            if (sheetName == null) {  return; }
+            if (sheetName == null) {  return false; }
             if (sheet != null)
             {
-                if (sheet.Name == sheetName) { return; }
-                //sheet.CloseAccessCache(AccessCacheOptions.All);
+                if (sheet.Name == sheetName) { return true; }
                 sheet = book.Worksheets[sheetName];
             }
             else
@@ -84,10 +86,12 @@ namespace CommonLib.DatabaseClient
 
             if (sheet == null)
             {
-                sheet = book.Worksheets.Insert(book.Worksheets.Count + 1, SheetType.Worksheet, sheetName);
-                book.Worksheets.RemoveAt("Evaluation Warning");
+                if (insertNew) {
+                    sheet = book.Worksheets.Insert(book.Worksheets.Count, SheetType.Worksheet, sheetName);
 
-                //sheet.StartAccessCache(AccessCacheOptions.All);
+                } else {
+                    throw new Exception("Not Find excel sheet info");
+                }
             }
 
             if (range.HasValue)
@@ -98,6 +102,8 @@ namespace CommonLib.DatabaseClient
             {
                 SetSheetRange(0, 0, sheet.Cells.MaxDataRow, sheet.Cells.MaxDataColumn);
             }
+
+            return true;
         }
 
         /// Set range with header
@@ -136,7 +142,7 @@ namespace CommonLib.DatabaseClient
             List<ExcelHeader> header = new List<ExcelHeader>();
             for (int i = 0; i <= max; i++)
             {
-                Cell c = cs[startRow, startCol + i];
+                Cell c = cs[startRow - 1, startCol + i];
                 if(c == null || c.Value == null) { continue; }
 
                 header.Add(new ExcelHeader(c.Value.ToString(), i));
@@ -150,7 +156,11 @@ namespace CommonLib.DatabaseClient
         public List<Dictionary<string, object>> GetItemDictList(string sheetName, CellRange? range = null, List<string> columns = null)
         {
             range = range ?? new CellRange(sheetRange.StartRow, sheetRange.StartCol);
-            ChangeSheet(sheetName);
+            if (!ChangeSheet(sheetName, range))
+            {
+                return null;
+            }
+
             return GetItemDictListInner(range.Value, columns);
         }
 
@@ -202,7 +212,8 @@ namespace CommonLib.DatabaseClient
 
         public bool InsertItemDict(string sheetName, Dictionary<string, object> data, List<string> columns = null, int startRow = 0)
         {
-            ChangeSheet(sheetName);
+            if(!ChangeSheet(sheetName)) { return false; }
+
             columns = columns ?? TableClass.GetTableNamesDict(data);
 
             return InsertItemDictInner(data, columns, startRow);
@@ -235,6 +246,123 @@ namespace CommonLib.DatabaseClient
             List<string> cols = TableClass.GetTableNamesDict(data);
 
             return InsertItemDict(sheetName, data, cols);
+        }
+
+        public static bool TryConvert(string ev, PropertyInfo p, out object v)
+        {
+            TypeConverter tc = TypeDescriptor.GetConverter(p.PropertyType);
+            v = null;
+
+            if (tc == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                v = tc.ConvertFromInvariantString(ev);
+                return true;
+            }
+            catch (Exception err)
+            {
+                return false;
+            }
+        }
+
+        public List<T> ExportExcelSheetUploadData<T>(Workbook wb, string sheetName, string[] header, int startRow, int startColumn, out string error)
+        {
+            List<T> list;
+            error = "成功";
+
+            Worksheet ws = null;
+            if (wb.Worksheets.Count == 0)
+            {
+                error = "没有Excel表信息";
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(sheetName))
+            {
+                ws = wb.Worksheets[sheetName];
+            }
+            else
+            {
+                ws = wb.Worksheets[0];
+            }
+
+            if (ws == null)
+            {
+                error = "没有找到Excel表Sheet信息。";
+                return null;
+            }
+
+            Cells cells = ws.Cells;
+            string h;
+            object v;
+            string ev;
+            PropertyInfo p;
+            int dLen = cells.Rows.Count - startRow;
+            list = new List<T>();
+
+           
+
+            for (int i = 0; i < dLen; i++)
+            {
+                 T d = Activator.CreateInstance<T>();
+                for (int j = 0; j < header.Length; j++)
+                {
+                    h = header[j];
+                    if (string.IsNullOrWhiteSpace(h))
+                    {
+                        continue;
+                    }
+
+                    Dictionary<string, object> nd = d as Dictionary<string, object>;
+                    if(typeof(T) == typeof(Dictionary<string, object>))
+                    {
+                        v = cells[startRow + i, startColumn + j].Value;
+                        nd[h] = v;
+                    }
+                    else
+                    {
+                        p = ReflectionCommon.GetProperty<T>(h);
+                        if (p == null) { continue; }
+                        ev = cells[startRow + i, startColumn + j].StringValue;
+                        ev = ev == "/" ? "" : ev;
+                        if (!TryConvert(ev, p, out v))
+                        {
+                            error = string.Format(@"请检查{0}行, {1}列, {2} 是否正确填写。", i + startRow + 1, startColumn + j + 1, ev);
+                            return null;
+                        }
+
+                        ReflectionCommon.SetValue(d, h, v);
+                    }
+                }
+
+                list.Add(d);
+            }
+
+            return list;
+        }
+
+        public void FillExcelTable<T>(List<T> list, List<string> columns, Cells cells, int startRow, int startCol)
+        {
+            if (list == null || !list.Any())
+            {
+                return;
+            }
+
+            for (int listRow = 0; listRow < list.Count(); listRow++)
+            {
+                var info = list[listRow];
+                for (int i = 0; i < columns.Count(); i++)
+                {
+                    var value = ReflectionCommon.GetValue(info, columns[i]);
+                    cells[startRow + listRow, startCol + i].PutValue(value);
+                    cells[startRow + listRow, startCol + i].SetStyle(cells[startRow, startCol + i].GetStyle());
+                    cells.SetRowHeight(startRow + listRow, cells.GetRowHeight(startRow));
+                }
+            }
         }
     }
 

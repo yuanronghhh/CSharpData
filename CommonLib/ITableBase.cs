@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Reflection;
 
 namespace CommonLib.TableBasePackage
 {
@@ -34,10 +35,12 @@ namespace CommonLib.TableBasePackage
 
     public static class TableExtend
     {
+        public static Dictionary<string, object> data = new Dictionary<string, object>();
+
         public static Dictionary<string, object> GetRecord(this IDataReader reader)
         {
+            data.Clear();
             IDataRecord rc = reader;
-            Dictionary<string, object> data = new Dictionary<string, object>();
 
             for (int i = 0; i < rc.FieldCount; i++)
             {

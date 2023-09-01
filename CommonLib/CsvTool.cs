@@ -11,10 +11,12 @@ namespace CommonLib.CsvTool
 {
     public static class CsvCommon
     {
-        public static bool LoadCsvData(string path, Func<Dictionary<string, object>, bool> preHandler, string delimiter = "\t")
+        public static bool LoadCsvData(string path, Func<Dictionary<string, object>, bool> preHandler, string delimiter = "\t", bool hasHeader = true)
         {
             CsvConfiguration cfg = new CsvConfiguration(CultureInfo.CurrentCulture);
             cfg.Delimiter = delimiter;
+            cfg.HasHeaderRecord = hasHeader;
+
             using (StreamReader st = new StreamReader(path))
             {
                 using (CsvHelperReader csv = new CsvHelperReader(st, cfg))
